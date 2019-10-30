@@ -1,15 +1,14 @@
 #!/bin/sh
 
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 #
 # knsk.sh
 #
-# This script kill Kubernetes' namespaces that stuck in Terminanting status
+# This script delete Kubernetes' namespaces that stuck in Terminanting status
 #
-#                                                            Charles Santos 
-#                                                        thyarles@gmail.com
+#                                                          thyarles@gmail.com
 #
-# --------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 set -eu
 
@@ -26,7 +25,7 @@ if [ x$namespace != x ]; then
   k_pid=$!
   echo $k_pid
 else
-  echo No namespage in Terminating status found
+  echo No namespage in Terminating status found.
   exit 0
 fi
 
