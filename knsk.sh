@@ -23,7 +23,6 @@ if [ x$namespace != x ]; then
   # start the kubeclt proxy
   $k proxy > /dev/null 2>&1 &
   k_pid=$!
-  echo $k_pid
 else
   echo No namespage in Terminating status found.
   exit 0
@@ -32,13 +31,13 @@ fi
 # Remove stuck namespaces
 for n in $namespace
 do
-  echo "Force finish of $n... "
+  echo -n "Force finish of $n... "
   j=/tmp/$n.json
   $k get ns $n -o json > $j 
   sed -i s/\"kubernetes\"//g $j 
   curl -s -o $j.log -X PUT --data-binary @$j http://localhost:8001/api/v1/namespaces/$n/finalize -H "Content-Type: application/json" --header "Authorization: Bearer $t" --insecure
   sleep 5
-  echo -n "done!"
+  echo "done!"
 done
 
 # Kill kubectl proxy
