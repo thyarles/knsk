@@ -2,7 +2,5 @@
 
 This tool is aimed to kill namespaces that stuck in Terminating mode after you try to delete it.
 
-# Use
-
-#### Just download and call the scrip
+#### Just download and call the script
      sh knsk.sh 
