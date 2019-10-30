@@ -36,7 +36,7 @@ do
   j=/tmp/$n.json
   $k get ns $n -o json > $j 
   sed -i s/\"kubernetes\"//g $j 
-  curl -X PUT --data-binary @$j http://localhost:8001/api/v1/namespaces/$n/finalize -H "Content-Type: application/json" --header "Authorization: Bearer $t" --insecure
+  curl -s -X PUT --data-binary @$j http://localhost:8001/api/v1/namespaces/$n/finalize -H "Content-Type: application/json" --header "Authorization: Bearer $t" --insecure
   sleep 5
   echo -n "done!"
 done
