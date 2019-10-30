@@ -31,7 +31,7 @@ fi
 # Remove stuck namespaces
 for n in $namespace
 do
-  echo -n "Force finish of $n... "
+  echo -n "Deleting $n... "
   j=/tmp/$n.json
   $k get ns $n -o json > $j 
   sed -i s/\"kubernetes\"//g $j 
