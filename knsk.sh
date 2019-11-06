@@ -10,21 +10,47 @@
 #
 # ----------------------------------------------------------------------------
 
-set -eu
+set -u
 
-# Set variables
+# Set variable for kubectl
 k=kubectl
-t=$($k -n default describe secret $($k -n default get secrets | grep default | cut -f1 -d ' ') | grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' ') || echo Error to get the token
+
+# Test if kubectl is configured 
+$k cluster-info > /dev/null 2>&1
+error=$?
+
+if [ $error -gt 0 ]; then
+  echo "Error: can't execute kubectl on this machine."
+  exit 1
+fi
 
 # Get stuck namespaces
-namespace=$($k get ns | grep Terminating | cut -f1 -d ' ')
+namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
 
-if [ x$namespace != x ]; then
+# If exist namespace in Terminating mode, get access token and start the kubectl proxy
+if [ "x$namespace" != "x" ]; then
+
+  # Get access token 
+  t=$($k -n default describe secret $($k -n default get secrets | grep default | cut -f1 -d ' ') | grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' ')
+  error=$?
+
+  if [ $error -gt 0 ]; then
+    echo "Error: can't get the token."
+    exit 1
+  fi
+
   # start the kubeclt proxy
   $k proxy > /dev/null 2>&1 &
+  error=$?
   k_pid=$!
+
+  if [ $error -gt 0 ]; then
+    echo "Error: can't up the kubectl proxy."
+    exit 1
+  fi
+
 else
-  echo No namespage in Terminating status found.
+  echo "No namespace in Terminating status found."
   exit 0
 fi
 
