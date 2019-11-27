@@ -16,37 +16,66 @@ set -u
 # Short for kubectl
 k=kubectl
 
-echo "\nknsk\tThis script tries to kill stucked namespaces\n"
+# Clean flag
+clean=0
+
+# Check if kubectl are available
+echo "\nknsk\tKubernetes namespace killer - The right way will be tried first\n"
 echo -n "\t- Testing if kubectl is configured... "
 $k cluster-info > /dev/null 2>&1; error=$?
+
 if [ $error -gt 0 ]; then
-  echo "error, I can't execute kubectl on this machine!\n"
+  echo "error, I can't execute kubectl on this machine!"
   exit 1
 else
-  echo "ok!\n"
+  echo "ok!"
 fi
 
-echo -n "\t- Checking for namespaces with 'Terminating' status... "
+# Try clean deletion first, as suggested by https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
+echo -n "\n\t- Cheking if exists any apiservice unavailable... "
+apiservices=$($k get apiservice | grep False | cut -f1 -d ' ')  
+
+if [ "x$apiservices" != "x" ]; then echo "found!"
+
+  echo "\n\t  ===>\tPlease, verifiy if the resources bellow can be deleted.\n"
+  for apiservice in $apiservices; do echo "\t\t- AVAILABLE: False \tNAME: $apiservice"; done
+  echo -n "\n\t\t  Should I delete it for you (yes/no)? > "; read action; echo ""
+
+  if [ "x$action" != "xyes" ]; then
+
+    echo "\t\t  Ok, the right way is delete not available apiservices resources"
+    echo "\t\t  https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920"
+    echo "\n\t\t  If you want to delete by yourself later, run:"
+    for apiservice in $apiservices; do echo "\t\t  $k delete apiservice $apiservice "; done
+
+  else
+    # Set clean action
+    clean=1
+    for apiservice in $apiservices; do 
+      echo -n "\t\t  Deleting $apiservice... "
+      $k delete apiservice $apiservice > /dev/null 2>&1; error=$?
+      if [ $error -gt 0 ]; then
+        echo "failed!"
+      else
+        echo "ok!"
+      fi
+    done
+  fi
+else 
+  # Not found apiservices to delete
+  echo "not found!\n"
+fi
+
+if [ $clean -gt 0 ]; then
+  echo -n "\n\t- As apiresources was deleted, wait 5 minutes to let Kubernetes works... "
+  sleep 10; echo "ok!"; clean=0
+fi
+
+# Looking for stucked namespaces
+echo -n "\n\t- Checking namespaces with 'Terminating' status... "
   namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
   namespace="testea default testeb"
   if [ "x$namespace" != "x" ]; then echo "found!"
-
-    # Found namespaces in Terminating mode, listen it
-    # Cheking what can be wrong
-    
-    # Check if any namespaced pendencies that blocks namespace deletion
-    # It is a clean deletion, as suggested by https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
-    echo -n "\n\t- Cheking if exists any apiservice unavailable... "
-    apiservices=$($k get apiservice | grep False | cut -f1 -d ' ')  
-    if [ "x$apiservices" != "x" ]; then echo "found!"
-      echo "\n\t  ==>\tPlease, verifiy if the resources bellow can be deleted.\n"
-      echo "\t\tIf so, delete the resourses, wait 5 minutes, and run this script again. To delete, run: \n"
-      for apiservice in $apiservices; do echo "\t\t$k delete $apiservice "; done
-      echo "\n\t\tif you want to force the deletion whitout delete the bad apiresources (not recommended),"
-      echo "\t\tplease, call this script with the flag --force."
-    else 
-      echo "not found!"
-    fi
 
     # Finding all resources that still exist in namespace
     for n in $namespace; do 
