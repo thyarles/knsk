@@ -75,8 +75,8 @@ fi
 
 if [ $clean -gt 0 ]; then
   # As apiresouces was deleted, set a timer to see if Kubernetes do a clean deletion of stucked namespaces
-  OLD_IFS=IFS; IFS=:; echo
-  set -- $*; secs=10
+  OLD_IFS="$IFS"; IFS=:; echo
+  set -- $*; secs=300
   while [ $secs -gt 0 ]; do
     sleep 1 &
     printf "\r- apiresources deleted, waiting 5 minutes to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (secs/60)%60)) $((secs%60))
@@ -84,13 +84,12 @@ if [ $clean -gt 0 ]; then
     wait
   done
   printf "\r- apiresources deleted, waiting 5 minutes to see if Kubernetes do a clean namespace deletion... ok!  " 
-  set -u; IFS=OLD_IFS; echo "\n"; clean=0
+  set -u; IFS="$OLD_IFS"; echo "\n"; clean=0
 fi
 
 # Looking for stucked namespaces
 echo -n "- Checking for namespaces in Terminating status... "
 namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
-namespace="vote testeb"
 
 if [ "x$namespace" != "x" ]; then echo "found!\n"
 
@@ -109,22 +108,26 @@ if [ "x$namespace" != "x" ]; then echo "found!\n"
     if [ "x$resources" != "x" ]; then echo "found!\n"
       
       # Delete namespace pedding resources
-      # Set the flag
-      clean=1
+      for r in $resources; do echo "     --- $r"; done
+      echo -n "\n     Should I delete it for you (yes/[no])? > "; read action; echo ""
 
-      for r in $resources; do
-
-        echo -n "     >> Deleting $r... "
-        #echo $k delete $resource > /dev/null 2>&1; error=$?
-      
-        if [ $error -gt 0 ]; then 
-          echo "failed!"
-        else
-          echo "ok!"
-        fi
-
-      done   
-      echo
+      if [ "x$action" != "xyes" ]; then
+        echo "\tOk, the right way is delete not available apiservices resources, check it on"
+        echo "\thttps://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920\n"
+      else
+        # Set the flag
+        clean=1
+        for r in $resources; do
+          echo -n "     >> Deleting $r... "
+          $k -n $n --grace-period=0 --force=true delete $r > /dev/null 2>&1; error=$?
+          if [ $error -gt 0 ]; then 
+            echo "failed!"
+          else
+            echo "ok!"
+          fi
+        done   
+        echo
+      fi
     else 
       echo "not found!\n"
     fi  
@@ -138,8 +141,8 @@ fi
 
 if [ $clean -gt 0 ]; then
   # As resources was deleted, set a timer to see if Kubernetes do a clean deletion of stucked namespaces
-  OLD_IFS=IFS; IFS=:
-  set -- $*; secs=10
+  OLD_IFS="$IFS"; IFS=:
+  set -- $*; secs=60
   while [ $secs -gt 0 ]; do
     sleep 1 &
     printf "\r- Waiting a minute to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (secs/60)%60)) $((secs%60))
@@ -147,7 +150,7 @@ if [ $clean -gt 0 ]; then
     wait
   done
   printf "\r- Waiting a minutes to see if Kubernetes do a clean namespace deletion... ok!  " 
-  set -u; IFS=OLD_IFS; echo "\n"; clean=0
+  set -u; IFS="$OLD_IFS"; echo "\n"; clean=0
 fi
 
 # If flag found is setted, check again for stucked namespaces
@@ -155,8 +158,7 @@ if [ $found -gt 0 ]; then
 
   echo -n "- Checking again for namespaces in Terminating status... "
   namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
-  namespace="vote testeb"
-
+  
   if [ "x$namespace" != "x" ]; then echo "found!\n"
 
     # Try to get the access token
@@ -188,15 +190,15 @@ if [ $found -gt 0 ]; then
     for n in $namespace; do
       echo -n "  >> Forcing deletion of $n... "
       j=/tmp/$n.json
-      # $k get ns $n -o json > $j
-      # sed -i s/\"kubernetes\"//g $j
-      # curl -s -o $j.log -X PUT --data-binary @$j http://localhost:8002/api/v1/namespaces/$n/finalize -H "Content-Type: application/json" --header "Authorization: Bearer $t" --insecure
+      $k get ns $n -o json > $j 2>/dev/null
+      sed -i s/\"kubernetes\"//g $j
+      curl -s -o $j.log -X PUT --data-binary @$j http://localhost:8002/api/v1/namespaces/$n/finalize -H "Content-Type: application/json" --header "Authorization: Bearer $t" --insecure
       sleep 5
-      echo "ok!\n"
+      echo "ok!"
     done
 
     # Kill kubectl proxy
-    echo -n "  -- Stopping kubectl proxy... "
+    echo -n "\n  -- Stopping kubectl proxy... "
     kill $k_pid
 
     if [ $error -gt 0 ]; then 
@@ -210,4 +212,4 @@ if [ $found -gt 0 ]; then
   fi
 fi
 
-echo "Done, all clear!\n"
+echo "Done! Please, check if your stucked namespace was deleted!\n"
