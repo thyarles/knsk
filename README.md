@@ -6,7 +6,7 @@ It automate the tips by @alvaroaleman in https://github.com/kubernetes/kubernete
 
 If it doesn't work for you, please, let me know. It is hard to force namespace in Terminating mode just to test it.
 
-### Just call the script on an host that manage your Kubernetes (kubectl configured)
+### Just call the script on a host that manage your Kubernetes (kubectl configured)
 
 #### with CURL
      curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | sh 
