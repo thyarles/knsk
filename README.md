@@ -9,7 +9,7 @@ If it doesn't work for you, please, let me know. It is hard to force namespace i
 ### Just call the script on a host that manage your Kubernetes (kubectl configured)
 
 #### with CURL
-     curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | sh 
+     curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | bash 
 
 #### with WGET
-     wget -q https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh -O - | sh 
+     wget -q https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh -O - | bash 
