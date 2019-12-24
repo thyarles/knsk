@@ -36,7 +36,7 @@ else
 fi
 
 # Try clean deletion first, as suggested by https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
-echo -e -n "- Cheking for unavailable apiservices... "
+echo -e -n "- Checking for unavailable apiservices... "
 apiservices=$($k get apiservice | grep False | cut -f1 -d ' ')  
 
 if [ "x$apiservices" != "x" ]; then echo -e "found:\n"
@@ -99,7 +99,7 @@ if [ "x$namespace" != "x" ]; then echo -e "found!\n"
   # Finding all resources that still exist in namespace
   for n in $namespace; do
 
-    echo -e -n "  -- Cheking resources in namespace $n... "
+    echo -e -n "  -- Checking resources in namespace $n... "
 
     resources=$($k api-resources --verbs=list --namespaced -o name 2>/dev/null | \
                 xargs -n 1 $k get -n $n --no-headers=true --show-kind=true 2>/dev/null | \
