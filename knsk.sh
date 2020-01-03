@@ -22,14 +22,14 @@ clean=0
 # Found flag
 found=0
 
-# Check if kubectl are available
+# Check if kubectl is available
 echo -e "\nKubernetes namespace killer\n"
-echo -e -n "- Testing if kubectl is configured... "
+echo -e -n "- Checking if kubectl is configured... "
 $k cluster-info > /dev/null 2>&1; error=$?
 
 if [ $error -gt 0 ]; then
   echo -e "failed!"
-  echo -e "\n  Please, check if your kubeclt is installed and configured.\n"
+  echo -e "\n  Please, check if the kubeclt is installed and configured.\n"
   exit 1
 else
   echo -e "ok!\n"
