@@ -16,6 +16,22 @@ set -u
 # Short for kubectl
 k=kubectl
 
+# Check for external parameters
+#for arg in "$@"; do
+for arg; do
+	case $arg in
+	--skip-tls|-s)	k=$k" --insecure-skip-tls-verify"
+			;;
+        *)		echo "Infalid argument"; exit
+			;;
+	esac
+done
+echo $k
+exit
+
+# If you have a TLS and want to skip verification, uncomment the next line
+k="kubectl --insecure-skip-tls-verify"
+
 # Clean flag
 clean=0
 
