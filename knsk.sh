@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # ----------------------------------------------------------------------------
 #
@@ -13,34 +13,57 @@
 # Ensure declaration of variables before use it
 set -u
 
-# Short for kubectl
-k=kubectl
+# Variables
+k="kubectl"	# Short for kubectl
+delApi=0 	# Dont delete broken API by default
+clean=0		# Clean flag
+found=0		# Found flag
 
-# Check for external parameters
-#for arg in "$@"; do
-for arg; do
-	case $arg in
-	--skip-tls|-s)	k=$k" --insecure-skip-tls-verify"
-			;;
-        *)		echo "Infalid argument"; exit
-			;;
-	esac
+show_help () {
+
+    # Function to show help
+
+    echo -e "\n$(basename $0) [options]\n"
+    echo -e "  --skip-tls\tSet --insecure-skip-tls-verify on kubectl call"
+    echo -e "  --delete-api\tDelete broken API found in your Kubernetes cluster"
+    echo -e "  -h --help\tShow this help\n"
+    exit 0
+}
+
+# Check for parameters
+for arg in "$@"; do
+    case $arg in
+        --skip-tls)	
+            k=$k" --insecure-skip-tls-verify"
+        ;;
+        --delete-api)
+            delApi=1
+        ;;
+        *)
+            show_help
+        ;;
+    esac
 done
-echo $k
-exit
 
-# If you have a TLS and want to skip verification, uncomment the next line
-k="kubectl --insecure-skip-tls-verify"
+msg () {
 
-# Clean flag
-clean=0
+    # Function to pretty print messages
+    # First argument is identation
+    # Second argument is the message
 
-# Found flag
-found=0
+    case $1 in
+        1) msg="\n$2\n" ;;
+        2) msg="-n - $2..." ;;
+    esac
+    echo -e $msg
+}
 
 # Check if kubectl is available
-echo -e "\nKubernetes namespace killer\n"
-echo -e -n "- Checking if kubectl is configured... "
+#echo -e "\nKubernetes namespace killer\n"
+#echo -e -n "- Checking if kubectl is configured... "
+msg 1 "Kubernetes NameSpace Killer"
+msg 2 "Checking if $k is configured"
+exit
 $k cluster-info > /dev/null 2>&1; error=$?
 
 if [ $error -gt 0 ]; then
