@@ -13,7 +13,7 @@
 # Variables
   set -u       # Ensure declaration of variables before use it
   K="kubectl"  # Short for kubectl
-  DELAPI=0     # Don't delete broken API by default
+  DELBRK=0     # Don't delete broken API by default
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
@@ -23,10 +23,10 @@ show_help () {
     # Function to show help
 
     echo -e "\n$(basename $0) [options]\n"
-    echo -e "  --skip-tls\t  Set --insecure-skip-tls-verify on kubectl call"
-    echo -e "  --delete-api\t  Delete broken API found in your Kubernetes cluster"
-    echo -e "  --port number\t  Up kubectl prosy on this port, default is 8765"
-    echo -e "  -h --help\t  Show this help\n"
+    echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
+    echo -e "  --delete-broken\tDelete broken API found in your Kubernetes cluster"
+    echo -e "  --port {number}\tUp kubectl prosy on this port, default is 8765"
+    echo -e "  -h --help\t\tShow this help\n"
     exit 0
 }
 
@@ -41,8 +41,8 @@ while (( "$#" )); do
       K=$K" --insecure-skip-tls-verify"
       shift
     ;;
-    --delete-api)
-      DELAPI=1
+    --delete-broken)
+      DELBRK=1
       shift
     ;;
     --port)
@@ -75,7 +75,7 @@ pp () {
 }
 
 # Check if kubectl is available
-  echo -e "\n>>> $K / $DELAPI / $KPORT <<<\n"
+  echo -e "\n>>> $K / $DELBRK / $KPORT <<<\n"
   pp t1 "Kubernetes NameSpace Killer"
   pp t2 "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
