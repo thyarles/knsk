@@ -10,69 +10,79 @@
 #
 # ----------------------------------------------------------------------------
 
-# Ensure declaration of variables before use it
-set -u
-
 # Variables
-k="kubectl"	# Short for kubectl
-delApi=0 	# Dont delete broken API by default
-clean=0		# Clean flag
-found=0		# Found flag
+  set -u       # Ensure declaration of variables before use it
+  K="kubectl"  # Short for kubectl
+  DELAPI=0     # Don't delete broken API by default
+  CLEAN=0      # Start clean flag
+  FOUND=0      # Start found flag
+  KPORT=8765   # Default port to up kubectl proxy
 
 show_help () {
 
     # Function to show help
 
     echo -e "\n$(basename $0) [options]\n"
-    echo -e "  --skip-tls\tSet --insecure-skip-tls-verify on kubectl call"
-    echo -e "  --delete-api\tDelete broken API found in your Kubernetes cluster"
-    echo -e "  -h --help\tShow this help\n"
+    echo -e "  --skip-tls\t  Set --insecure-skip-tls-verify on kubectl call"
+    echo -e "  --delete-api\t  Delete broken API found in your Kubernetes cluster"
+    echo -e "  --port number\t  Up kubectl prosy on this port, default is 8765"
+    echo -e "  -h --help\t  Show this help\n"
     exit 0
 }
 
 # Check for parameters
-for arg in "$@"; do
-    case $arg in
-        --skip-tls)	
-            k=$k" --insecure-skip-tls-verify"
-        ;;
-        --delete-api)
-            delApi=1
-        ;;
-        *)
-            show_help
-        ;;
-    esac
+# for arg in "$@"; do
+while (( "$#" )); do
+
+  ARG=$1
+
+  case $ARG in
+    --skip-tls)	
+      K=$K" --insecure-skip-tls-verify"
+      shift
+    ;;
+    --delete-api)
+      DELAPI=1
+      shift
+    ;;
+    --port)
+      shift
+      # Check if the parameter of port is a number
+      [ "$1" -eq "$1" ] 2>/dev/null || show_help
+      KPORT=$1
+      shift
+    ;;
+    *)
+      show_help
+    ;;
+  esac
 done
 
-msg () {
+pp () {
 
     # Function to pretty print messages
     # First argument is identation
     # Second argument is the message
 
     case $1 in
-        1) msg="\n$2\n" ;;
-        2) msg="-n - $2..." ;;
+        t1)   echo  -e "\n$2\n"      ;;
+        t2)   echo -ne "- $2..."     ;;
+        ok)   echo  -e " ok!"        ;;
+        fail) echo  -e " fail!\n"
+              echo  -e "$2.\n"
+              exit   1
     esac
-    echo -e $msg
 }
 
 # Check if kubectl is available
-#echo -e "\nKubernetes namespace killer\n"
-#echo -e -n "- Checking if kubectl is configured... "
-msg 1 "Kubernetes NameSpace Killer"
-msg 2 "Checking if $k is configured"
-exit
-$k cluster-info > /dev/null 2>&1; error=$?
+  echo -e "\n>>> $K / $DELAPI / $KPORT <<<\n"
+  pp t1 "Kubernetes NameSpace Killer"
+  pp t2 "Checking if kubectl is configured"
+  $K cluster-info >& /dev/null; E=$?
+  [ $E -gt 0 ] && pp fail "Check if the kubeclt is installed and configured"
+  pp ok
 
-if [ $error -gt 0 ]; then
-  echo -e "failed!"
-  echo -e "\n  Please, check if the kubeclt is installed and configured.\n"
-  exit 1
-else
-  echo -e "ok!\n"
-fi
+exit
 
 # Try clean deletion first, as suggested by https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
 echo -e -n "- Checking for unavailable apiservices... "
