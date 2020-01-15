@@ -18,127 +18,138 @@
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
 
-show_help () {
-
-    # Function to show help
-
+# Function to show help
+  show_help () {
     echo -e "\n$(basename $0) [options]\n"
     echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
     echo -e "  --delete-broken\tDelete broken API found in your Kubernetes cluster"
     echo -e "  --port {number}\tUp kubectl prosy on this port, default is 8765"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
-}
+  }
 
 # Check for parameters
-# for arg in "$@"; do
-while (( "$#" )); do
+  while (( "$#" )); do
 
-  ARG=$1
+    ARG=$1
 
-  case $ARG in
-    --skip-tls)	
-      K=$K" --insecure-skip-tls-verify"
-      shift
-    ;;
-    --delete-broken)
-      DELBRK=1
-      shift
-    ;;
-    --port)
-      shift
-      # Check if the parameter of port is a number
-      [ "$1" -eq "$1" ] 2>/dev/null || show_help
-      KPORT=$1
-      shift
-    ;;
-    *)
-      show_help
-    ;;
-  esac
-done
+    case $ARG in
+      --skip-tls)	
+        K=$K" --insecure-skip-tls-verify"
+        shift
+      ;;
+      --delete-broken)
+        DELBRK=1
+        shift
+      ;;
+      --port)
+        shift
+        # Check if the parameter of port is a number
+        [ "$1" -eq "$1" ] 2>/dev/null || show_help
+        KPORT=$1
+        shift
+      ;;
+      *)
+        show_help
+      ;;
+    esac
+  done
 
-pp () {
-
-    # Function to pretty print messages
-    # First argument is identation
+# Function to format and print messages
+  pp () {
+    # First argument is the type of message
     # Second argument is the message
-
     case $1 in
-        t1)   echo  -e "\n$2\n"      ;;
-        t2)   echo -ne "- $2..."     ;;
-        ok)   echo  -e " ok!"        ;;
-        fail) echo  -e " fail!\n"
+      t1)     echo  -e "\n$2\n"            ;;
+      t2)     echo  -e "- $2.\n"           ;;
+      t2n)    echo -ne "- $2... "          ;;
+      t3)     echo  -e "  -- $2\n"         ;;
+      t3n)    echo -ne "  -- $2... "       ;;
+      t4)     echo  -e "     > $2\n"       ;;
+      t4n)    echo -ne "     > $2... "     ;;
+      ok)     echo  -e "ok!\n"             ;;
+      found)  echo  -e "found!\n"          ;;
+      nfound) echo  -e "not found!\n"      ;;
+      error)  echo  -e "error!\n"          ;;
+      fail)   echo  -e "fail!\n"
               echo  -e "$2.\n"
               exit   1
     esac
-}
+  }
+
+# Function to sleep for a while
+  timer () {
+    SECS=$''; OLD_IFS="$IFS"; IFS=:; set -- $*
+    SECS=$1
+    MSG=$2
+    while [ $SECS -gt 0 ]; do
+      sleep 1 &
+      #printf "\r- Waiting to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (SECS/60)%60)) $((SECS%60))
+      printf "\r- $MSG... %02d:%02d" $(( (SECS/60)%60)) $((SECS%60))
+      SECS=$(( $SECS - 1 ))
+      wait
+    done
+    printf "\r- $MSG... ok!  " 
+    set -u; IFS="$OLD_IFS"; echo -e "\n"; export CLEAN=0
+  }  
 
 # Check if kubectl is available
-  echo -e "\n>>> $K / $DELBRK / $KPORT <<<\n"
+  #echo -e "\n>>> $K / $DELBRK / $KPORT <<<\n"
   pp t1 "Kubernetes NameSpace Killer"
-  pp t2 "Checking if kubectl is configured"
+  pp t2n "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
   [ $E -gt 0 ] && pp fail "Check if the kubeclt is installed and configured"
   pp ok
 
-exit
-
-# Try clean deletion first, as suggested by https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
-echo -e -n "- Checking for unavailable apiservices... "
-apiservices=$($k get apiservice | grep False | cut -f1 -d ' ')  
-
-if [ "x$apiservices" != "x" ]; then echo -e "found:\n"
-
-  for a in $apiservices; do echo -e "  -- $a (not available)"; done
-  
-  echo -e -n "\n  Should I delete it for you (yes/[no])? > "; read action; echo -e ""
-
-  if [ "x$action" != "xyes" ]; then
-
-    echo -e "\tOk, the right way is delete not available apiservices resources, check it on"
-    echo -e "\thttps://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920\n"
-    echo -e "\tIf you want to delete by yourself later, run:\n"
-    for a in $apiservices; do echo -e "\t$k delete apiservice $a"; done
-    echo -e 
-
+# Check for broken APIs
+  pp t2n "Checking for unavailable apiservices"
+  APISERVICE=$($K get apiservice | grep False | cut -f1 -d ' ')
+  # More info in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
+  if [ "x$APISERVICE" == "x" ]; then
+    # Nothing found, go on
+    pp nfound
   else
-
-    # Set clean action
-    clean=1
-    for a in $apiservices; do 
-      echo -e -n "  >> Deleting $a... "
-      $k delete apiservice $a > /dev/null 2>&1; error=$?
-      if [ $error -gt 0 ]; then
-        echo -e "failed!"
+    # Something found, let's deep in
+    pp found
+    for API in $APISERVICE; do
+      pp t3 "$API (broken)"
+      if (( $DELBRK )); then
+        CLEAN=1
+        pp t4n Removing
+        $K delete apiservice $API >& /dev/null; E=$?
+        if [ $E -gt 0 ]; then pp error; else pp ok; fi
       else
-        echo -e "ok!"
+        pp t4 "To remove later, do: # $K delete apiservice $API"
       fi
     done
-
+    [ $CLEAN -gt 0 ] && timer 5 "apiresources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
-else 
-  # Not found apiservices to delete
-  echo -e "not found!\n"
-fi
 
-if [ $clean -gt 0 ]; then
-  # As apiresouces was deleted, set a timer to see if Kubernetes do a clean deletion of stucked namespaces
-  OLD_IFS="$IFS"; IFS=:; echo -e
-  set -- $*; secs=300
-  while [ $secs -gt 0 ]; do
-    sleep 1 &
-    printf "\r- apiresources deleted, waiting 5 minutes to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (secs/60)%60)) $((secs%60))
-    secs=$(( $secs - 1 ))
-    wait
-  done
-  printf "\r- apiresources deleted, waiting 5 minutes to see if Kubernetes do a clean namespace deletion... ok!  " 
-  set -u; IFS="$OLD_IFS"; echo -e "\n"; clean=0
-fi
+# Look for stucked namespaces
+  pp t2n "Checking for namespaces in Terminating status"
+  NS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
+  NS="default"
+  if [ "x$NS" == "x" ]; then
+    # Nothing found, go on
+    pp nfound
+  else
+    pp found
+    FOUND=1
+    pp t3n "Checking resources in namespace $NS"
+    for N in $NS; do
+      RESOURCES=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
+                xargs -n 1 $K get -n $N --no-headers=true --show-kind=true 2>/dev/null | \
+                grep -v Cancelling | cut -f1 -d ' ')
+      if [ "x$RESOURCES" == "x" ]; then
+        # Nothing found, go on
+        pp nfound
+      else
+        pp found
+      fi
+    done
+  fi
 
-# Looking for stucked namespaces
-echo -e -n "- Checking for namespaces in Terminating status... "
-namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
+exit
 
 if [ "x$namespace" != "x" ]; then echo -e "found!\n"
 
