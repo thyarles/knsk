@@ -14,16 +14,23 @@
   set -u       # Ensure declaration of variables before use it
   K="kubectl"  # Short for kubectl
   DELBRK=0     # Don't delete broken API by default
+  DELRES=0     # Don't delete inside resources by default
+  FORCE=0      # Don't force deletion with kubeclt proxy by default
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
+  TIME=15      # Default timeout to wait for kubectl command responses
 
 # Function to show help
   show_help () {
     echo -e "\n$(basename $0) [options]\n"
     echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
-    echo -e "  --delete-broken\tDelete broken API found in your Kubernetes cluster"
+    echo -e "  --delete-api\t\tDelete broken API founded in your Kubernetes cluster"
+    echo -e "  --delete-resource\tDelete resources founded in your stucked namespaces"
+    echo -e "  --delete-all\t\tDelete resources and API founded"
+    echo -e "  --force\t\tForce deletion of stucked namespaces even if a clen deletion fail"
     echo -e "  --port {number}\tUp kubectl prosy on this port, default is 8765"
+    echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
   }
@@ -35,8 +42,21 @@
         K=$K" --insecure-skip-tls-verify"
         shift
       ;;
-      --delete-broken)
+      --delete-api)
         DELBRK=1
+        shift
+      ;;
+      --delete-resource)
+        DELRES=1
+        shift
+      ;;
+      --delete-all)
+        DELBRK=1
+        DELRES=1
+        shift
+      ;;
+      --force)
+        FORCE=1
         shift
       ;;
       --port)
@@ -44,6 +64,13 @@
         # Check if the port is a number
         [ "$1" -eq "$1" ] 2>/dev/null || show_help
         KPORT=$1
+        shift
+      ;;
+      --timeout)
+        shift
+        # Check if the time is a number
+        [ "$1" -eq "$1" ] 2>/dev/null || show_help
+        TIME=$1
         shift
       ;;
       *) show_help
@@ -54,6 +81,8 @@
   pp () {
     # First argument is the type of message
     # Second argument is the message
+    C="\e[96m"    # Cyan
+    M="\e[95m"    # Magenta
     B="\e[94m"    # Blue
     Y="\e[93m"    # Yellow
     G="\e[92m"    # Green
@@ -61,18 +90,20 @@
     S="\e[0m"     # Reset
     N="\n"        # New line
     case $1 in
-      t1)     echo  -e "$N$G$2$S$N"            ;;
-      t2)     echo  -e "$Y- $2$S$N"            ;;
-      t3)     echo  -e "$Y  -- $2$N"           ;;
-      t4)     echo  -e "$Y     > $2$N"         ;;
-      t2n)    echo -ne "$Y- $2...$S"           ;;
-      t3n)    echo -ne "$Y  -- $2...$S"        ;;
-      t4n)    echo -ne "$Y     > $2...$S"      ;;
-      ok)     echo  -e "$G ok!$S$N"             ;;
-      found)  echo  -e "$G found!$S$N"          ;;
-      nfound) echo  -e "$Y not found!$S$N"      ;;
-      error)  echo  -e "$R error!$S$N"          ;;
-      fail)   echo  -e "$R fail!$S$N"
+      t1)     echo  -e "$N$G$2$S"            ;;
+      t2)     echo  -e "$N$Y$2$S"            ;;
+      t3)     echo  -e "$Y.: $2"           ;;
+      t4)     echo  -e "$Y   > $2"         ;;
+      t2n)    echo -ne "$N$Y$2...$S"           ;;
+      t3n)    echo -ne "$Y.: $2...$S"        ;;
+      t4n)    echo -ne "$Y   > $2...$S"      ;;
+      ok)     echo  -e "$G ok$S"             ;;
+      found)  echo  -e "$R found$S"          ;;
+      nfound) echo  -e "$Y not found$S"      ;;
+      del)    echo  -e "$G deleted$S"             ;;
+      skip)   echo  -e "$C deletion skipped$S"          ;;
+      error)  echo  -e "$R error$S"          ;;
+      fail)   echo  -e "$R fail$S"
               echo  -e "$2.$N"
               exit   1
     esac
@@ -83,7 +114,7 @@
     OLD_IFS="$IFS"; IFS=:; set -- $*; SECS=$1; MSG=$2
     while [ $SECS -gt 0 ]; do
       sleep 1 &
-      printf "\r- $MSG... %02d:%02d" $(( (SECS/60)%60)) $((SECS%60))
+      printf "\r.: \e[93m$MSG... %02d:%02d\e[0m" $(( (SECS/60)%60)) $((SECS%60))
       SECS=$(( $SECS - 1 ))
       wait
     done
@@ -100,43 +131,52 @@
 
 # Check for broken APIs
   pp t2n "Checking for unavailable apiservices"
-  APISERVICE=$($K get apiservice | grep False | cut -f1 -d ' ')
+  APIS=$($K get apiservice | grep False | cut -f1 -d ' ')
   # More info in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
-  if [ "x$APISERVICE" == "x" ]; then
+  if [ "x$APIS" == "x" ]; then
     pp nfound  # Nothing found, go on
   else
     pp found   # Something found, let's deep in
-    for API in $APISERVICE; do
-      pp t3 "$API (broken)"
+    for API in $APIS; do
+      pp t3n "Broken -> $R$API$S"
       if (( $DELBRK )); then
         CLEAN=1
-        pp t4n Removing
-        $K delete apiservice $API >& /dev/null; E=$?
-        if [ $E -gt 0 ]; then pp error; else pp ok; fi
+        timeout $TIME $K delete apiservice $API >& /dev/null; E=$?
+        if [ $E -gt 0 ]; then pp error; else pp del; fi
       else
-        pp t4 "To remove later, do: # $K delete apiservice $API"
+        pp skip
       fi
     done
-    [ $CLEAN -gt 0 ] && timer 5 "apiresources deleted, waiting to see if Kubernetes do a clean namespace deletion"
+    [ $CLEAN -gt 0 ] && timer 30 "apiresources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
 
 # Look for stucked namespaces
   pp t2n "Checking for namespaces in Terminating status"
-  NS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
-  NS="default"
-  if [ "x$NS" == "x" ]; then
+  NSS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
+  NSS="eleicao"
+  if [ "x$NSS" == "x" ]; then
     pp nfound
   else
     pp found; FOUND=1
-    pp t3n "Checking resources in namespace $NS"
-    for N in $NS; do
-      RESOURCES=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
-                xargs -n 1 $K get -n $N --no-headers=true --show-kind=true 2>/dev/null | \
-                grep -v Cancelling | cut -f1 -d ' ')
-      if [ "x$RESOURCES" == "x" ]; then
+    for NS in $NSS; do
+      pp t3n "Checking resources in namespace $R$NS$S"
+      RESS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
+           xargs -n 1 $K get -n $NS --no-headers=true --show-kind=true 2>/dev/null | \
+           grep -v Cancelling | cut -f1 -d ' ')
+      if [ "x$RESS" == "x" ]; then
         pp nfound
       else
         pp found
+        for RES in $RESS; do
+          pp t4n $RES 
+          if (( $DELRES )); then
+            CLEAN=1
+            timeout $TIME $K -n $NS --grace-period=0 --force=true delete $RES > /dev/null 2>&1; E=$?
+            if [ $E -gt 0 ]; then pp error; else pp del; fi
+          else
+            pp skip
+          fi
+        done
       fi
     done
   fi
@@ -276,3 +316,8 @@ if [ $found -gt 0 ]; then
 fi
 
 echo -e "Done! Please, check if your stucked namespace was deleted!\n"
+
+
+#kubectl patch pvc pvc_name -p '{"metadata":{"finalizers":null}}'
+#kubectl patch pv pv_name -p '{"metadata":{"finalizers":null}}'
+#kubectl patch pod pod_name -p '{"metadata":{"finalizers":null}}'
