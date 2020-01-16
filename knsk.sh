@@ -68,12 +68,12 @@
       t2n)    echo -ne "$Y- $2...$S"           ;;
       t3n)    echo -ne "$Y  -- $2...$S"        ;;
       t4n)    echo -ne "$Y     > $2...$S"      ;;
-      ok)     echo  -e "$G ok$S$N"             ;;
-      found)  echo  -e "$G found$S$N"          ;;
-      nfound) echo  -e "$Y not found$S$N"      ;;
-      error)  echo  -e "$R error$S$N"          ;;
-      fail)   echo  -e "$R fail$S$N"
-              echo  -e "$2$N"
+      ok)     echo  -e "$G ok!$S$N"             ;;
+      found)  echo  -e "$G found!$S$N"          ;;
+      nfound) echo  -e "$Y not found!$S$N"      ;;
+      error)  echo  -e "$R error!$S$N"          ;;
+      fail)   echo  -e "$R fail!$S$N"
+              echo  -e "$2.$N"
               exit   1
     esac
   }
