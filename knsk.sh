@@ -54,20 +54,26 @@
   pp () {
     # First argument is the type of message
     # Second argument is the message
+    B="\e[94m"    # Blue
+    Y="\e[93m"    # Yellow
+    G="\e[92m"    # Green
+    R="\e[91m"    # Red
+    S="\e[0m"     # Reset
+    N="\n"        # New line
     case $1 in
-      t1)     echo  -e "\n$2\n"            ;;
-      t2)     echo  -e "- $2.\n"           ;;
-      t3)     echo  -e "  -- $2\n"         ;;
-      t4)     echo  -e "     > $2\n"       ;;
-      t2n)    echo -ne "- $2... "          ;;
-      t3n)    echo -ne "  -- $2... "       ;;
-      t4n)    echo -ne "     > $2... "     ;;
-      ok)     echo  -e "ok!\n"             ;;
-      found)  echo  -e "found!\n"          ;;
-      nfound) echo  -e "not found!\n"      ;;
-      error)  echo  -e "error!\n"          ;;
-      fail)   echo  -e "fail!\n"
-              echo  -e "$2.\n"
+      t1)     echo  -e "$N$G$2$S$N"            ;;
+      t2)     echo  -e "$Y- $2$S$N"            ;;
+      t3)     echo  -e "$Y  -- $2$N"           ;;
+      t4)     echo  -e "$Y     > $2$N"         ;;
+      t2n)    echo -ne "$Y- $2...$S"           ;;
+      t3n)    echo -ne "$Y  -- $2...$S"        ;;
+      t4n)    echo -ne "$Y     > $2...$S"      ;;
+      ok)     echo  -e "$G ok$S$N"             ;;
+      found)  echo  -e "$G found$S$N"          ;;
+      nfound) echo  -e "$Y not found$S$N"      ;;
+      error)  echo  -e "$R error$S$N"          ;;
+      fail)   echo  -e "$R fail$S$N"
+              echo  -e "$2$N"
               exit   1
     esac
   }
