@@ -30,10 +30,7 @@
 
 # Check for parameters
   while (( "$#" )); do
-
-    ARG=$1
-
-    case $ARG in
+    case $1 in
       --skip-tls)	
         K=$K" --insecure-skip-tls-verify"
         shift
@@ -44,14 +41,12 @@
       ;;
       --port)
         shift
-        # Check if the parameter of port is a number
+        # Check if the port is a number
         [ "$1" -eq "$1" ] 2>/dev/null || show_help
         KPORT=$1
         shift
       ;;
-      *)
-        show_help
-      ;;
+      *) show_help
     esac
   done
 
@@ -62,10 +57,10 @@
     case $1 in
       t1)     echo  -e "\n$2\n"            ;;
       t2)     echo  -e "- $2.\n"           ;;
-      t2n)    echo -ne "- $2... "          ;;
       t3)     echo  -e "  -- $2\n"         ;;
-      t3n)    echo -ne "  -- $2... "       ;;
       t4)     echo  -e "     > $2\n"       ;;
+      t2n)    echo -ne "- $2... "          ;;
+      t3n)    echo -ne "  -- $2... "       ;;
       t4n)    echo -ne "     > $2... "     ;;
       ok)     echo  -e "ok!\n"             ;;
       found)  echo  -e "found!\n"          ;;
@@ -79,12 +74,9 @@
 
 # Function to sleep for a while
   timer () {
-    SECS=$''; OLD_IFS="$IFS"; IFS=:; set -- $*
-    SECS=$1
-    MSG=$2
+    OLD_IFS="$IFS"; IFS=:; set -- $*; SECS=$1; MSG=$2
     while [ $SECS -gt 0 ]; do
       sleep 1 &
-      #printf "\r- Waiting to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (SECS/60)%60)) $((SECS%60))
       printf "\r- $MSG... %02d:%02d" $(( (SECS/60)%60)) $((SECS%60))
       SECS=$(( $SECS - 1 ))
       wait
@@ -94,7 +86,6 @@
   }  
 
 # Check if kubectl is available
-  #echo -e "\n>>> $K / $DELBRK / $KPORT <<<\n"
   pp t1 "Kubernetes NameSpace Killer"
   pp t2n "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
@@ -106,11 +97,9 @@
   APISERVICE=$($K get apiservice | grep False | cut -f1 -d ' ')
   # More info in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
   if [ "x$APISERVICE" == "x" ]; then
-    # Nothing found, go on
-    pp nfound
+    pp nfound  # Nothing found, go on
   else
-    # Something found, let's deep in
-    pp found
+    pp found   # Something found, let's deep in
     for API in $APISERVICE; do
       pp t3 "$API (broken)"
       if (( $DELBRK )); then
@@ -130,18 +119,15 @@
   NS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
   NS="default"
   if [ "x$NS" == "x" ]; then
-    # Nothing found, go on
     pp nfound
   else
-    pp found
-    FOUND=1
+    pp found; FOUND=1
     pp t3n "Checking resources in namespace $NS"
     for N in $NS; do
       RESOURCES=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
                 xargs -n 1 $K get -n $N --no-headers=true --show-kind=true 2>/dev/null | \
                 grep -v Cancelling | cut -f1 -d ' ')
       if [ "x$RESOURCES" == "x" ]; then
-        # Nothing found, go on
         pp nfound
       else
         pp found
