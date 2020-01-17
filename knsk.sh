@@ -12,7 +12,7 @@
 
 # Variables
   set -u       # Ensure declaration of variables before use it
-  K="kubectl"  # Short for kubectl
+  K='kubectl'  # Short for kubectl
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
   FORCE=0      # Don't force deletion with kubeclt proxy by default
@@ -20,14 +20,14 @@
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
   TIME=15      # Default timeout to wait for kubectl command responses
-  C="\e[96m"   # Cyan
-  M="\e[95m"   # Magenta
-  B="\e[94m"   # Blue
-  Y="\e[93m"   # Yellow
-  G="\e[92m"   # Green
-  R="\e[91m"   # Red
-  S="\e[0m"    # Reset
-  N="\n"       # New line
+  C='\e[96m'   # Cyan
+  M='\e[95m'   # Magenta
+  B='\e[94m'   # Blue
+  Y='\e[93m'   # Yellow
+  G='\e[92m'   # Green
+  R='\e[91m'   # Red
+  S='\e[0m'    # Reset
+  N='\n'       # New line
 
 # Function to show help
   show_help () {
@@ -95,20 +95,20 @@
     # First argument is the type of message
     # Second argument is the message
     case $1 in
-      t1)     echo  -e "$N$G$2$S"                        ;;
-      t2)     echo  -e "$N$Y$2$S"                        ;;
-      t3)     echo  -e "$Y.: $2"                         ;;
-      t4)     echo  -e "$Y   > $2"                       ;;
-      t2n)    echo -ne "$N$Y$2...$S"                     ;;
-      t3n)    echo -ne "$Y.: $2...$S"                    ;;
-      t4n)    echo -ne "$Y   > $2...$S"                  ;;
-      ok)     echo  -e "$G ok$S"                         ;;
-      found)  echo  -e "$R found$S"                      ;;
+      t1    ) echo  -e "$N$G$2$S"                        ;;
+      t2    ) echo  -e "$N$Y$2$S"                        ;;
+      t3    ) echo  -e "$Y.: $2"                         ;;
+      t4    ) echo  -e "$Y   > $2"                       ;;
+      t2n   ) echo -ne "$N$Y$2...$S"                     ;;
+      t3n   ) echo -ne "$Y.: $2...$S"                    ;;
+      t4n   ) echo -ne "$Y   > $2...$S"                  ;;
+      ok    ) echo  -e "$G ok$S"                         ;;
+      found ) echo  -e "$R found$S"                      ;;
       nfound) echo  -e "$Y not found$S"                  ;;
-      del)    echo  -e "$G deleted$S"                    ;;
-      skip)   echo  -e "$C deletion skipped$S"           ;;
-      error)  echo  -e "$R error$S"                      ;;
-      fail)   echo  -e "$R fail$S"; echo -e "$N$2.$N"; exit 1
+      del   ) echo  -e "$G deleted$S"                    ;;
+      skip  ) echo  -e "$C deletion skipped$S"           ;;
+      error ) echo  -e "$R error$S"                      ;;
+      fail  ) echo  -e "$R fail$S"; echo -e "$N$2.$N"; exit 1
     esac
   }
 
