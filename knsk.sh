@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # ----------------------------------------------------------------------------
 #
@@ -10,217 +10,245 @@
 #
 # ----------------------------------------------------------------------------
 
-# Ensure declaration of variables before use it
-set -u
+# Variables
+  set -u       # Ensure declaration of variables before use it
+  K='kubectl'  # Short for kubectl
+  DELBRK=0     # Don't delete broken API by default
+  DELRES=0     # Don't delete inside resources by default
+  FORCE=0      # Don't force deletion with kubeclt proxy by default
+  CLEAN=0      # Start clean flag
+  FOUND=0      # Start found flag
+  KPORT=8765   # Default port to up kubectl proxy
+  TIME=15      # Default timeout to wait for kubectl command responses
+  WAIT=60      # Default time to wait Kubernetes do clean deletion
+  C='\e[96m'   # Cyan
+  M='\e[95m'   # Magenta
+  B='\e[94m'   # Blue
+  Y='\e[93m'   # Yellow
+  G='\e[92m'   # Green
+  R='\e[91m'   # Red
+  S='\e[0m'    # Reset
+  N='\n'       # New line
 
-# Short for kubectl
-k=kubectl
+# Function to show help
+  show_help () {
+    echo -e "\n$(basename $0) [options]\n"
+    echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
+    echo -e "  --delete-api\t\tDelete broken API founded in your Kubernetes cluster"
+    echo -e "  --delete-resource\tDelete resources founded in your stucked namespaces"
+    echo -e "  --delete-all\t\tDelete resources of stucked namespaces and broken API"
+    echo -e "  --force\t\tForce deletion of stucked namespaces even if a clen deletion fail"
+    echo -e "  --port {number}\tUp kubectl prosy on this port, default is 8765"
+    echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands"
+    echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
+    echo -e "  -h --help\t\tShow this help\n"
+    exit 0
+  }
 
-# Clean flag
-clean=0
+# Check for parameters
+  while (( "$#" )); do
+    case $1 in
+      --skip-tls)	
+        K=$K" --insecure-skip-tls-verify"
+        shift
+      ;;
+      --delete-api)
+        DELBRK=1
+        shift
+      ;;
+      --delete-resource)
+        DELRES=1
+        shift
+      ;;
+      --delete-all)
+        DELBRK=1
+        DELRES=1
+        shift
+      ;;
+      --force)
+        FORCE=1
+        shift
+      ;;
+      --port)
+        shift
+        # Check if the port is a number
+        [ "$1" -eq "$1" ] 2>/dev/null || show_help
+        KPORT=$1
+        shift
+      ;;
+      --timeout)
+        shift
+        # Check if the time is a number
+        [ "$1" -eq "$1" ] 2>/dev/null || show_help
+        TIME=$1
+        shift
+      ;;
+      --no-color)
+        C=''; M=''; B=''; Y=''; G=''; R=''; S=''
+        shift
+      ;;
+      *) show_help
+    esac
+  done
 
-# Found flag
-found=0
+# Function to format and print messages
+  pp () {
+    # First argument is the type of message
+    # Second argument is the message
+    case $1 in
+      t1    ) echo  -e "$N$G$2$S"                        ;;
+      t2    ) echo  -e "$N$Y$2$S"                        ;;
+      t3    ) echo  -e "$Y.: $2"                         ;;
+      t4    ) echo  -e "$Y   > $2"                       ;;
+      t2n   ) echo -ne "$N$Y$2...$S"                     ;;
+      t3n   ) echo -ne "$Y.: $2...$S"                    ;;
+      t4n   ) echo -ne "$Y   > $2...$S"                  ;;
+      ok    ) echo  -e "$G ok$S"                         ;;
+      found ) echo  -e "$C found$S"                      ;;
+      nfound) echo  -e "$G not found$S"                  ;;
+      del   ) echo  -e "$G deleted$S"                    ;;
+      skip  ) echo  -e "$C deletion skipped$S"           ;;
+      error ) echo  -e "$R error$S"                      ;;
+      fail  ) echo  -e "$R fail$S"; echo -e "$N$R$2.$S$N";
+              exit 1
+    esac
+  }
+
+# Function to sleep for a while
+  timer () {
+    OLD_IFS="$IFS"; IFS=:; set -- $*; SECS=$1; MSG=$2
+    while [ $SECS -gt 0 ]; do
+      sleep 1 &
+      printf "\r.: $Y$MSG$S... $G%02d:%02d$S" $(( (SECS/60)%60)) $((SECS%60))
+      SECS=$(( $SECS - 1 ))
+      wait
+    done
+    printf "\r.: $Y$MSG...$G ok      $S$N" 
+    set -u; IFS="$OLD_IFS"; export CLEAN=0
+  }  
 
 # Check if kubectl is available
-echo -e "\nKubernetes namespace killer\n"
-echo -e -n "- Checking if kubectl is configured... "
-$k cluster-info > /dev/null 2>&1; error=$?
+  pp t1 "Kubernetes NameSpace Killer"
+  pp t2n "Checking if kubectl is configured"
+  $K cluster-info >& /dev/null; E=$?
+  [ $E -gt 0 ] && pp fail "Check if the kubeclt is installed and configured"
+  pp ok
 
-if [ $error -gt 0 ]; then
-  echo -e "failed!"
-  echo -e "\n  Please, check if the kubeclt is installed and configured.\n"
-  exit 1
-else
-  echo -e "ok!\n"
-fi
-
-# Try clean deletion first, as suggested by https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
-echo -e -n "- Checking for unavailable apiservices... "
-apiservices=$($k get apiservice | grep False | cut -f1 -d ' ')  
-
-if [ "x$apiservices" != "x" ]; then echo -e "found:\n"
-
-  for a in $apiservices; do echo -e "  -- $a (not available)"; done
-  
-  echo -e -n "\n  Should I delete it for you (yes/[no])? > "; read action; echo -e ""
-
-  if [ "x$action" != "xyes" ]; then
-
-    echo -e "\tOk, the right way is delete not available apiservices resources, check it on"
-    echo -e "\thttps://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920\n"
-    echo -e "\tIf you want to delete by yourself later, run:\n"
-    for a in $apiservices; do echo -e "\t$k delete apiservice $a"; done
-    echo -e 
-
+# Check for broken APIs
+  pp t2n "Checking for unavailable apiservices"
+  APIS=$($K get apiservice | grep False | cut -f1 -d ' ')
+  # More info in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
+  if [ "x$APIS" == "x" ]; then
+    pp nfound  # Nothing found, go on
   else
-
-    # Set clean action
-    clean=1
-    for a in $apiservices; do 
-      echo -e -n "  >> Deleting $a... "
-      $k delete apiservice $a > /dev/null 2>&1; error=$?
-      if [ $error -gt 0 ]; then
-        echo -e "failed!"
+    pp found   # Something found, let's deep in
+    for API in $APIS; do
+      pp t3n "Broken -> $R$API$S"
+      if (( $DELBRK )); then
+        CLEAN=1
+        timeout $TIME $K delete apiservice $API >& /dev/null; E=$?
+        if [ $E -gt 0 ]; then pp error; else pp del; fi
       else
-        echo -e "ok!"
+        pp skip
       fi
     done
-
+    [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
-else 
-  # Not found apiservices to delete
-  echo -e "not found!\n"
-fi
 
-if [ $clean -gt 0 ]; then
-  # As apiresouces was deleted, set a timer to see if Kubernetes do a clean deletion of stucked namespaces
-  OLD_IFS="$IFS"; IFS=:; echo -e
-  set -- $*; secs=300
-  while [ $secs -gt 0 ]; do
-    sleep 1 &
-    printf "\r- apiresources deleted, waiting 5 minutes to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (secs/60)%60)) $((secs%60))
-    secs=$(( $secs - 1 ))
-    wait
-  done
-  printf "\r- apiresources deleted, waiting 5 minutes to see if Kubernetes do a clean namespace deletion... ok!  " 
-  set -u; IFS="$OLD_IFS"; echo -e "\n"; clean=0
-fi
-
-# Looking for stucked namespaces
-echo -e -n "- Checking for namespaces in Terminating status... "
-namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
-
-if [ "x$namespace" != "x" ]; then echo -e "found!\n"
-
-  # Set the flag
-  found=1
-
-  # Finding all resources that still exist in namespace
-  for n in $namespace; do
-
-    echo -e -n "  -- Checking resources in namespace $n... "
-
-    resources=$($k api-resources --verbs=list --namespaced -o name 2>/dev/null | \
-                xargs -n 1 $k get -n $n --no-headers=true --show-kind=true 2>/dev/null | \
-                grep -v Cancelling | cut -f1 -d ' ')
-
-    if [ "x$resources" != "x" ]; then echo -e "found!\n"
-      
-      # Delete namespace pedding resources
-      for r in $resources; do echo -e "     --- $r"; done
-      echo -e -n "\n     Should I delete it for you (yes/[no])? > "; read action; echo -e ""
-
-      if [ "x$action" != "xyes" ]; then
-        echo -e "\tOk, the right way is delete not available apiservices resources, check it on"
-        echo -e "\thttps://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920\n"
+# Search for resources in stucked namespaces
+  pp t2n "Checking for resources on stucked namespaces"
+  NSS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
+  if [ "x$NSS" == "x" ]; then
+    pp nfound
+  else
+    pp found
+    for NS in $NSS; do
+      pp t3n "Checking resources in namespace $R$NS$S"
+      RESS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
+           xargs -n 1 $K get -n $NS --no-headers=true --show-kind=true 2>/dev/null | \
+           grep -v Cancelling | cut -f1 -d ' ')
+      if [ "x$RESS" == "x" ]; then
+        pp nfound
       else
-        # Set the flag
-        clean=1
-        for r in $resources; do
-          echo -e -n "     >> Deleting $r... "
-          $k -n $n --grace-period=0 --force=true delete $r > /dev/null 2>&1; error=$?
-          if [ $error -gt 0 ]; then 
-            echo -e "failed!"
+        pp found
+        for RES in $RESS; do
+          pp t4n $RES 
+          if (( $DELRES )); then
+            CLEAN=1
+            # Try to delete by delete command
+            timeout $TIME $K -n $NS --grace-period=0 --force=true delete $RES > /dev/null 2>&1; E=$?
+            if [ $E -gt 0 ]; then 
+              # Try to delete by patching
+              timeout $TIME $K -n $NS patch $RES -p '{"metadata":{"finalizers":null}}' > /dev/null 2>&1; E=$?
+              if [ $E -gt 0 ]; then pp error; else pp del; fi
+            else
+              pp del
+            fi
           else
-            echo -e "ok!"
+            pp skip
           fi
-        done   
-        echo -e
-      fi
-    else 
-      echo -e "not found!\n"
-    fi  
-  done 
-else
-
-  # No namespace in Terminating mode found
-  echo -e "not found!\n"
-
-fi
-
-if [ $clean -gt 0 ]; then
-  # As resources was deleted, set a timer to see if Kubernetes do a clean deletion of stucked namespaces
-  OLD_IFS="$IFS"; IFS=:
-  set -- $*; secs=60
-  while [ $secs -gt 0 ]; do
-    sleep 1 &
-    printf "\r- Waiting a minute to see if Kubernetes do a clean namespace deletion... %02d:%02d" $(( (secs/60)%60)) $((secs%60))
-    secs=$(( $secs - 1 ))
-    wait
-  done
-  printf "\r- Waiting a minutes to see if Kubernetes do a clean namespace deletion... ok!  " 
-  set -u; IFS="$OLD_IFS"; echo -e "\n"; clean=0
-fi
-
-# If flag found is setted, check again for stucked namespaces
-if [ $found -gt 0 ]; then
-
-  echo -e -n "- Checking again for namespaces in Terminating status... "
-  namespace=$($k get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
-  
-  if [ "x$namespace" != "x" ]; then echo -e "found!\n"
-
-    # Try to get the access token
-    echo -e -n "  -- Getting the access token to force deletion... "
-    t=$($k -n default describe secret \
-      $($k -n default get secrets | grep default | cut -f1 -d ' ') | \
-      grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' '); error=$?
-
-    if [ $error -gt 0 ]; then 
-      echo -e "failed!\n"
-      exit 1
-    else
-      echo -e "ok!\n"
-    fi
-
-    # Start the kubeclt proxy
-    echo -e -n "  -- Starting kubectl proxy... "
-    p=8765
-    $k proxy --accept-hosts='^localhost$,^127\.0\.0\.1$,^\[::1\]$' -p $p  > /tmp/proxy.out 2>&1 &
-    error=$?; k_pid=$!
-
-    if [ $error -gt 0 ]; then 
-      echo -e "failed (please, check if the port $p is free)!\n"
-      exit 1
-    else
-      echo -e "ok (on port $p)!\n"
-    fi
-
-    # Forcing namespace deletion
-    for n in $namespace; do
-      echo -e -n "  >> Forcing deletion of $n... "
-      j=/tmp/$n.json
-      $k get ns $n -o json > $j 2>/dev/null
-     
-      # If in MacOS sed is called different
-      # Thanks https://github.com/ChrisScottThomas
-      if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s/\"kubernetes\"//g" $j
-      else
-        sed -i s/\"kubernetes\"//g $j
-      fi
-
-      curl -s -o $j.log -X PUT --data-binary @$j http://localhost:$p/api/v1/namespaces/$n/finalize -H "Content-Type: application/json" --header "Authorization: Bearer $t" --insecure
-
-      sleep 5
-      echo -e "ok!"
+        done        
+      fi      
     done
-
-    # Kill kubectl proxy
-    echo -e -n "\n  -- Stopping kubectl proxy... "
-    kill $k_pid; wait $k_pid 2>/dev/null
-
-    if [ $error -gt 0 ]; then 
-      echo -e "failed!\n"
-      exit 1
-    else
-      echo -e "ok!\n"
-    fi
-  else
-    # Flag found not setted
-    echo -e "not found!\n"
+    [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
-fi
 
-echo -e "Done! Please, check if your stucked namespace was deleted!\n"
+# Search for resisted stucked namespaces and force deletion if --force is passed
+  if (( $FORCE )); then
+
+    pp t2 "Forcing deletion of stucked namespaces"
+
+    # Check if --force is used without --delete-resouce
+    pp t3n "Checking compliance of --force option"
+    (( $DELRES )) || pp fail "The '--force' option must be used with '--delelete-all' or '--delete-resource options'"
+    pp ok
+    
+    # Try to get the access token
+    pp t3n "Getting the access token to force deletion"
+    TOKEN=$($K -n default describe secret \
+          $($K -n default get secrets | grep default | cut -f1 -d ' ') | \
+          grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' '); E=$?
+    [ $E -gt 0 ] && pp fail "Unable to gat the token to force a deletion"
+    pp ok
+
+    # Try to up the kubectl proxy
+    pp t3n "Starting kubectl proxy"
+    $K proxy --accept-hosts='^localhost$,^127\.0\.0\.1$,^\[::1\]$' -p $KPORT  >> /tmp/proxy.out 2>&1 &
+    E=$?; KPID=$!
+    [ $E -gt 0 ] && pp fail "Unable start a proxy, check if the port '$KPORT' is free. Change it by passing '--port number' flag"
+    pp ok
+
+    # Force namespace deletion
+    pp t3n "Checking for resisted stucked namespaces to force deletion"
+    NSS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
+    if [ "x$NSS" == "x" ]; then
+      pp nfound
+    else
+      pp found; FOUND=1
+      for NS in $NSS; do
+        pp t4n "Forcing deletion of $NS"
+        TMP=/tmp/$NS.json
+        $K get ns $NS -o json > $TMP 2>/dev/null
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/\"kubernetes\"//g" $TMP
+        else
+          sed -i s/\"kubernetes\"//g $TMP
+        fi
+        curl -s -o $TMP.log -X PUT --data-binary @$TMP http://localhost:$KPORT/api/v1/namespaces/$NS/finalize \
+             -H "Content-Type: application/json" --header "Authorization: Bearer $TOKEN" --insecure
+        sleep 5
+        pp ok
+      done
+    fi
+
+    # Close the proxy
+    pp t3n "Stopping kubectl proxy"
+    kill $KPID; E=$?
+    wait $KPID 2>/dev/null
+    if [ $E -gt 0 ]; then pp error; else pp ok; fi
+  fi
+
+# End of script
+  (( $FOUND )) || (( $DELBRK )) || (( $DELRES )) || pp t2 ":: Run '$G$(basename $0) --help$Y' if you want to delete resources by this script."
+  pp t2 ":: Done in $SECONDS seconds.$N"
+  exit 0
