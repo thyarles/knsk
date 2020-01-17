@@ -20,6 +20,14 @@
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
   TIME=15      # Default timeout to wait for kubectl command responses
+  C="\e[96m"   # Cyan
+  M="\e[95m"   # Magenta
+  B="\e[94m"   # Blue
+  Y="\e[93m"   # Yellow
+  G="\e[92m"   # Green
+  R="\e[91m"   # Red
+  S="\e[0m"    # Reset
+  N="\n"       # New line
 
 # Function to show help
   show_help () {
@@ -31,6 +39,7 @@
     echo -e "  --force\t\tForce deletion of stucked namespaces even if a clen deletion fail"
     echo -e "  --port {number}\tUp kubectl prosy on this port, default is 8765"
     echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands"
+    echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
   }
@@ -73,6 +82,10 @@
         TIME=$1
         shift
       ;;
+      --no-color)
+        C=''; M=''; B=''; Y=''; G=''; R=''; S=''
+        shift
+      ;;
       *) show_help
     esac
   done
@@ -81,31 +94,21 @@
   pp () {
     # First argument is the type of message
     # Second argument is the message
-    C="\e[96m"    # Cyan
-    M="\e[95m"    # Magenta
-    B="\e[94m"    # Blue
-    Y="\e[93m"    # Yellow
-    G="\e[92m"    # Green
-    R="\e[91m"    # Red
-    S="\e[0m"     # Reset
-    N="\n"        # New line
     case $1 in
-      t1)     echo  -e "$N$G$2$S"            ;;
-      t2)     echo  -e "$N$Y$2$S"            ;;
-      t3)     echo  -e "$Y.: $2"           ;;
-      t4)     echo  -e "$Y   > $2"         ;;
-      t2n)    echo -ne "$N$Y$2...$S"           ;;
-      t3n)    echo -ne "$Y.: $2...$S"        ;;
-      t4n)    echo -ne "$Y   > $2...$S"      ;;
-      ok)     echo  -e "$G ok$S"             ;;
-      found)  echo  -e "$R found$S"          ;;
-      nfound) echo  -e "$Y not found$S"      ;;
-      del)    echo  -e "$G deleted$S"             ;;
-      skip)   echo  -e "$C deletion skipped$S"          ;;
-      error)  echo  -e "$R error$S"          ;;
-      fail)   echo  -e "$R fail$S"
-              echo  -e "$2.$N"
-              exit   1
+      t1)     echo  -e "$N$G$2$S"                        ;;
+      t2)     echo  -e "$N$Y$2$S"                        ;;
+      t3)     echo  -e "$Y.: $2"                         ;;
+      t4)     echo  -e "$Y   > $2"                       ;;
+      t2n)    echo -ne "$N$Y$2...$S"                     ;;
+      t3n)    echo -ne "$Y.: $2...$S"                    ;;
+      t4n)    echo -ne "$Y   > $2...$S"                  ;;
+      ok)     echo  -e "$G ok$S"                         ;;
+      found)  echo  -e "$R found$S"                      ;;
+      nfound) echo  -e "$Y not found$S"                  ;;
+      del)    echo  -e "$G deleted$S"                    ;;
+      skip)   echo  -e "$C deletion skipped$S"           ;;
+      error)  echo  -e "$R error$S"                      ;;
+      fail)   echo  -e "$R fail$S"; echo -e "$N$2.$N"; exit 1
     esac
   }
 
