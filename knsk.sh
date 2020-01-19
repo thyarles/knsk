@@ -34,12 +34,13 @@
   show_help () {
     echo -e "\n$(basename $0) [options]\n"
     echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
-    echo -e "  --delete-api\t\tDelete broken API founded in your Kubernetes cluster"
-    echo -e "  --delete-resource\tDelete resources founded in your stucked namespaces"
+    echo -e "  --delete-api\t\tDelete broken API found in your Kubernetes cluster"
+    echo -e "  --delete-resource\tDelete resources found in your stucked namespaces"
     echo -e "  --delete-all\t\tDelete resources of stucked namespaces and broken API"
-    echo -e "  --force\t\tForce deletion of stucked namespaces even if a clen deletion fail"
-    echo -e "  --port {number}\tUp kubectl prosy on this port, default is 8765"
-    echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands"
+    echo -e "  --force\t\tForce deletion of stucked namespaces even if a clean deletion fail"
+    echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
+    echo -e "  --timeout {number}\tMax time (in seconds) to 
+    for Kubectl commands"
     echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
@@ -152,7 +153,7 @@
         pp skip
       fi
     done
-    [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes do a clean namespace deletion"
+    [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes does a clean namespace deletion"
   fi
 
 # Search for resources in stucked namespaces
