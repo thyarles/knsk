@@ -20,7 +20,7 @@ In this mode, this script only shows the possible causes that put your namespace
     --delete-resource     Delete resources founded in your stucked namespaces
     --delete-all          Delete resources of stucked namespaces and broken API
     --force               Force deletion of stucked namespaces even if a clen deletion fail
-    --port {number}       Up kubectl prosy on this port, default is 8765
+    --port {number}       Up kubectl proxy on this port, default is 8765
     --timeout {number}    Max time (in seconds) to wait for Kubectl commands
     --no-color            All output without colors (useful for scripts)
     -h --help             Show this help
