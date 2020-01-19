@@ -39,8 +39,7 @@
     echo -e "  --delete-all\t\tDelete resources of stucked namespaces and broken API"
     echo -e "  --force\t\tForce deletion of stucked namespaces even if a clean deletion fail"
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
-    echo -e "  --timeout {number}\tMax time (in seconds) to 
-    for Kubectl commands"
+    echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands"
     echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
