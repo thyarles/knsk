@@ -16,8 +16,8 @@ In this mode, this script only shows the possible causes that put your namespace
     knsk.sh [options]
 
     --skip-tls            Set --insecure-skip-tls-verify on kubectl call
-    --delete-api          Delete broken API founded in your Kubernetes cluster
-    --delete-resource     Delete resources founded in your stucked namespaces
+    --delete-api          Delete broken API found in your Kubernetes cluster
+    --delete-resource     Delete resources found in your stucked namespaces
     --delete-all          Delete resources of stucked namespaces and broken API
     --force               Force deletion of stucked namespaces even if a clen deletion fail
     --port {number}       Up kubectl proxy on this port, default is 8765
