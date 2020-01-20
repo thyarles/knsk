@@ -226,18 +226,17 @@
   done
   (( $PRINTED )) || pp nfound
 
-# Search for orphan resources in all namespaces
+# Search for stucked resources in cluster
   pp t2n "Checking for stucked resources in the cluster"
-  PRINTED=0
   ORS=$(echo $ORS | grep Terminating)
   if [ "x$ORS" = "x" ]; then
     pp nfound
   else
     pp found
-    NOS=$(echo $OR | cut -d ' ' -f1)      
-    NRS=$(echo $OR | cut -d ' ' -f2)
-    NST=$(echo $OR | cut -d ' ' -f4)
     for OR in $ORS; do
+      NOS=$(echo $OR | cut -d ' ' -f1)      
+      NRS=$(echo $OR | cut -d ' ' -f2)
+      NST=$(echo $OR | cut -d ' ' -f4)
       pp t3n "Found $R$NRS$S$Y on namespace $R$NOS$S"
       if (( $DELORP )); then
         CLEAN=1
