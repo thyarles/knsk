@@ -15,6 +15,7 @@
   K='kubectl'  # Short for kubectl
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
+  DELORP=0     # Don't delete orphan resources by default
   FORCE=0      # Don't force deletion with kubeclt proxy by default
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
@@ -35,7 +36,8 @@
     echo -e "\n$(basename $0) [options]\n"
     echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
     echo -e "  --delete-api\t\tDelete broken API found in your Kubernetes cluster"
-    echo -e "  --delete-resource\tDelete resources found in your stucked namespaces"
+    echo -e "  --delete-resource\tDelete stucked resources found in your stucked namespaces"
+    echo -e "  --delete-orphan\tDelete orphan resources found in your cluster"
     echo -e "  --delete-all\t\tDelete resources of stucked namespaces and broken API"
     echo -e "  --force\t\tForce deletion of stucked namespaces even if a clean deletion fail"
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
@@ -60,9 +62,14 @@
         DELRES=1
         shift
       ;;
+      --delete-orphan)
+        DELORP=1
+        shift
+      ;;
       --delete-all)
         DELBRK=1
         DELRES=1
+        DELORP=1
         shift
       ;;
       --force)
@@ -104,12 +111,12 @@
       t3n   ) echo -ne "$Y.: $2...$S"                    ;;
       t4n   ) echo -ne "$Y   > $2...$S"                  ;;
       ok    ) echo  -e "$G ok$S"                         ;;
-      found ) echo  -e "$C found$S"                      ;;
+      found ) echo  -e "$C found$S"; FOUND=1             ;;
       nfound) echo  -e "$G not found$S"                  ;;
       del   ) echo  -e "$G deleted$S"                    ;;
       skip  ) echo  -e "$C deletion skipped$S"           ;;
       error ) echo  -e "$R error$S"                      ;;
-      fail  ) echo  -e "$R fail$S"; echo -e "$N$R$2.$S$N";
+      fail  ) echo  -e "$R fail$S$N$R$2.$S$N"
               exit 1
     esac
   }
@@ -142,7 +149,6 @@
     pp nfound  # Nothing found, go on
   else
     pp found   # Something found, let's deep in
-    FOUND=1
     for API in $APIS; do
       pp t3n "Broken -> $R$API$S"
       if (( $DELBRK )); then
@@ -194,6 +200,61 @@
     [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
 
+# Search for orphan resources in all namespaces
+  pp t2n "Checking for orphan resources in the cluster"
+  ORS=$($K api-resources --verbs=list --namespaced -o name | \
+      xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null | tr -s ' ')
+  OLD_IFS=$IFS; IFS=$'\n'
+  PRINTED=0
+  NSS=$($K get ns --no-headers 2>/dev/null | cut -f1 -d ' ')  # All existing mamespaces
+  for OR in $ORS; do
+    NOS=$(echo $OR | cut -d ' ' -f1)      
+    NRS=$(echo $OR | cut -d ' ' -f2)
+    # Check if the resource belongs an existent namespace
+    NOTOK=1; for NS in $NSS; do [[ $NS = *$NOS* ]] && NOTOK=0; done
+    if (( $NOTOK )); then
+      (( $PRINTED )) || pp found && PRINTED=1
+      pp t3n "Found $R$NRS$S$Y on deleted namespace $R$NOS$S"
+      if (( $DELORP )); then
+        CLEAN=1
+        timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS > /dev/null 2>&1; E=$?
+        if [ $E -gt 0 ]; then pp error; else pp del; fi
+      else
+        pp skip
+      fi
+    fi
+  done
+  (( $PRINTED )) || pp nfound
+
+# Search for orphan resources in all namespaces
+  pp t2n "Checking for stucked resources in the cluster"
+  PRINTED=0
+  ORS=$(echo $ORS | grep Terminating)
+  if [ "x$ORS" = "x" ]; then
+    pp nfound
+  else
+    pp found
+    NOS=$(echo $OR | cut -d ' ' -f1)      
+    NRS=$(echo $OR | cut -d ' ' -f2)
+    NST=$(echo $OR | cut -d ' ' -f4)
+    for OR in $ORS; do
+      pp t3n "Found $R$NRS$S$Y on namespace $R$NOS$S"
+      if (( $DELORP )); then
+        CLEAN=1
+        timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS > /dev/null 2>&1; E=$?
+        if [ $E -gt 0 ]; then 
+          timeout $TIME $K -n $NOS patch $NRS -p '{"metadata":{"finalizers":null}}' > /dev/null 2>&1; E=$?
+          if [ $E -gt 0 ]; then pp error; else pp del; fi
+        else
+          pp del
+        fi
+      else
+        pp skip
+      fi
+    done
+  fi
+  IFS=$OLD_IFS
+
 # Search for resisted stucked namespaces and force deletion if --force is passed
   if (( $FORCE )); then
 
@@ -225,7 +286,7 @@
     if [ "x$NSS" == "x" ]; then
       pp nfound
     else
-      pp found; FOUND=1
+      pp found
       for NS in $NSS; do
         pp t4n "Forcing deletion of $NS"
         TMP=/tmp/$NS.json
@@ -250,6 +311,7 @@
   fi
 
 # End of script
-  (( 1-$FOUND )) || (( $DELBRK )) || (( $DELRES )) || pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
+  (( 1-$FOUND )) || (( $DELBRK )) || (( $DELRES )) || (( $DELORP )) || \
+  pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
