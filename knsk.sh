@@ -142,6 +142,7 @@
     pp nfound  # Nothing found, go on
   else
     pp found   # Something found, let's deep in
+    FOUND=1
     for API in $APIS; do
       pp t3n "Broken -> $R$API$S"
       if (( $DELBRK )); then
@@ -249,6 +250,6 @@
   fi
 
 # End of script
-  (( $FOUND )) || (( $DELBRK )) || (( $DELRES )) || pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
+  (( 1-$FOUND )) || (( $DELBRK )) || (( $DELRES )) || pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
