@@ -203,13 +203,13 @@
 # Search for orphan resources in all namespaces
   pp t2n "Checking for orphan resources in the cluster"
   ORS=$($K api-resources --verbs=list --namespaced -o name | \
-      xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null | tr -s ' ')
+      xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null)
   OLD_IFS=$IFS; IFS=$'\n'
   PRINTED=0
   NSS=$($K get ns --no-headers 2>/dev/null | cut -f1 -d ' ')  # All existing mamespaces
   for OR in $ORS; do
-    NOS=$(echo $OR | cut -d ' ' -f1)      
-    NRS=$(echo $OR | cut -d ' ' -f2)
+    NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)      
+    NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
     # Check if the resource belongs an existent namespace
     NOTOK=1; for NS in $NSS; do [[ $NS = *$NOS* ]] && NOTOK=0; done
     if (( $NOTOK )); then
@@ -225,18 +225,20 @@
     fi
   done
   (( $PRINTED )) || pp nfound
+  IFS=$OLD_IFS
 
 # Search for stucked resources in cluster
   pp t2n "Checking for stucked resources in the cluster"
-  ORS=$(echo $ORS | grep Terminating)
+  ORS=$($K api-resources --verbs=list --namespaced -o name | \
+      xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null | grep Terminating)
+  OLD_IFS=$IFS; IFS=$'\n'
   if [ "x$ORS" = "x" ]; then
     pp nfound
   else
     pp found
     for OR in $ORS; do
-      NOS=$(echo $OR | cut -d ' ' -f1)      
-      NRS=$(echo $OR | cut -d ' ' -f2)
-      NST=$(echo $OR | cut -d ' ' -f4)
+      NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)      
+      NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
       pp t3n "Found $R$NRS$S$Y on namespace $R$NOS$S"
       if (( $DELORP )); then
         CLEAN=1
