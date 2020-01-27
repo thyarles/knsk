@@ -348,7 +348,7 @@
           sed -i s/\"kubernetes\"//g $TMP
         fi
         CMD="curl -s -o $TMP.log -X PUT --data-binary @$TMP http://localhost:$KPORT/api/v1/namespaces/$NS/finalize \
-                  -H "Content-Type: application/json" --header "Authorization: Bearer $TOKEN" --insecure"
+                  -H \"Content-Type: application/json\" --header \"Authorization: Bearer $TOKEN\" --insecure"
         if (( $DRYRUN )); then
           pp dryrun
           pp t4d "$CMD"
