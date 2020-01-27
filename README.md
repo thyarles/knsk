@@ -6,6 +6,8 @@ It automates the tips by https://github.com/alvaroaleman in https://github.com/k
 
 If it doesn't work for you, please, let me know. It is hard to force namespace in Terminating mode just to test it.
 
+Just to see what is the possible commands to solve the problem by yourself, use the advanced mode like `./knsk.sh --dry-run --delete-all --force`.
+
 ### Basic usage
      curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | bash 
      wget -q https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh -O - | bash 
@@ -15,6 +17,7 @@ In this mode, this script only shows the possible causes that put your namespace
 ### Advanced options
     knsk.sh [options]
 
+    --dry-run             Show what will be executed instead of execute it (use with '--delete-*' options)
     --skip-tls            Set --insecure-skip-tls-verify on kubectl call
     --delete-api          Delete broken API found in your Kubernetes cluster
     --delete-resource     Delete resources found in your stucked namespaces
