@@ -12,7 +12,7 @@ If it doesn't work for you, please, let me know. It is hard to force namespace i
      
 In this mode, this script only shows the possible causes that put your namespaces in **Terminating** mode. If you want this script to try to fix the mess, clone this repository, set the execution bit to the `knsk.sh` script and look at advanced options by typing `./knsk.sh --help`.
 
-Just to see what is the possible commands to solve the problem by yourself, use the advanced mode like
+Just to see what are the possible commands to solve the problem by yourself, use the advanced mode like
 
      ./knsk.sh --dry-run --delete-all --force
 
