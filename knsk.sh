@@ -98,7 +98,7 @@
         shift
       ;;
       --no-color)
-        C=''; M=''; B=''; Y=''; G=''; R=''; S=''
+        C=''; M=''; B=''; Y=''; G=''; R=''; S=''; A=''
         shift
       ;;
       *) show_help
