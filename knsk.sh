@@ -267,20 +267,21 @@
 # Search for orphan resources in the cluster
   pp t2n "Checking for orphan resources in the cluster"
   ORS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
-      xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null |  grep "/" | grep -v "^ ")
+      xargs -n 1 $K get -A --no-headers -o custom-columns=NS:.metadata.namespace,KIND:.kind,NAME:.metadata.name 2>/dev/null)
   OLD_IFS=$IFS; IFS=$'\n'; PRINTED=0
   NSS=$($K get ns --no-headers 2>/dev/null | cut -f1 -d ' ')  # All existing mamespaces
   for OR in $ORS; do
     NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)      
-    NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
+    KND=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
+    NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f3)
     # Check if the resource belongs an existent namespace
     NOTOK=1; for NS in $NSS; do [[ $NS = *$NOS* ]] && NOTOK=0; done
     if (( $NOTOK )); then
       (( $PRINTED )) || pp found && PRINTED=1
-      pp t3n "Found $R$NRS$S$Y on deleted namespace $R$NOS$S"
+      pp t3n "Found $R$KND/$NRS$S$Y on deleted namespace $R$NOS$S"
       if (( $DELORP )); then
-        CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS"
-        CMD2="timeout $TIME $K -n $NOS patch $NRS -p '{\"metadata\":{\"finalizers\":null}}'"
+        CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $KND/$NRS"
+        CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS -p '{\"metadata\":{\"finalizers\":null}}'"
         if (( $DRYRUN )); then
           pp dryrun
           pp t3d "$CMD1"
