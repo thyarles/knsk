@@ -1,6 +1,6 @@
 # knsk - Kubernetes namespace killer
 
-This tool is aimed to kill namespaces that stuck in Terminating mode after you try to delete it. Just calling this script without flags, it shows you the possible problemns that put your namespace in forever terminating mode.
+This tool is aimed to kill namespaces that are stuck in Terminating mode after you try to delete them. Just calling this script without flags, it shows you the possible problems that put your namespace in forever terminating mode.
 
 It automates the tips by https://github.com/alvaroaleman in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
 
@@ -24,7 +24,7 @@ Just to see what are the possible commands to solve the problem by yourself, use
     --delete-api          Delete broken API found in your Kubernetes cluster
     --delete-resource     Delete resources found in your stucked namespaces
     --delete-all          Delete resources of stucked namespaces and broken API
-    --force               Force deletion of stucked namespaces even if a clen deletion fail
+    --force               Force deletion of stucked namespaces even if a clean deletion fail
     --port {number}       Up kubectl proxy on this port, default is 8765
     --timeout {number}    Max time (in seconds) to wait for Kubectl commands
     --no-color            All output without colors (useful for scripts)
