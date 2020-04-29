@@ -322,7 +322,7 @@
     TOKEN=$($K -n default describe secret \
           $($K -n default get secrets | grep default | cut -f1 -d ' ') | \
           grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' '); E=$?
-    [ $E -gt 0 ] && pp fail "Unable to gat the token to force a deletion"
+    [ $E -gt 0 ] && pp fail "Unable to get the token to force a deletion"
     pp ok
 
     # Try to up the kubectl proxy
