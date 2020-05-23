@@ -6,6 +6,10 @@ It automates the tips by https://github.com/alvaroaleman in https://github.com/k
 
 If it doesn't work for you, please, let me know. It is hard to force namespace in Terminating mode just to test it.
 
+### Do you want a backup first? Just call the script to make a backup of all cluster in YAML format, ordered by folder:
+     curl -s https://raw.githubusercontent.com/thyarles/knsk/master/bakup-yaml.sh | bash 
+     wget -q https://raw.githubusercontent.com/thyarles/knsk/master/bakup-yaml.sh -O - | bash 
+
 ### Basic usage
      curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | bash 
      wget -q https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh -O - | bash 
