@@ -102,7 +102,7 @@
         shift
         # Check if the port is a number
         [ -z "$1" ] 2>/dev/null || show_help
-        KFLAGS="$KFLAGS $1"
+        KFLAGS="$KFLAGS --kubeconfig=$1"
         shift
       ;;
       --no-color)
@@ -383,4 +383,3 @@
   pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
-
