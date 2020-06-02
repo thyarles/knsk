@@ -35,4 +35,5 @@ Just to see what are the possible commands to solve the problem by yourself, use
     --port {number}       Up kubectl proxy on this port, default is 8765
     --timeout {number}    Max time (in seconds) to wait for Kubectl commands
     --no-color            All output without colors (useful for scripts)
+    --kubeconfig          Use specified kubeconfig file
     -h --help             Show this help
