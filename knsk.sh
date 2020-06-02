@@ -13,6 +13,7 @@
 # Variables
   set -u       # Ensure declaration of variables before use it
   K='kubectl'  # Short for kubectl
+  KFLAGS=''    # kubectl extra flags
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
   DELORP=0     # Don't delete orphan resources by default
@@ -100,8 +101,8 @@
       ;;
       --kubeconfig)
         shift
-        # Check if the port is a number
-        [ -z "$1" ] 2>/dev/null || show_help
+        # Check if the kubeconfig is empty
+        [ -n "$1" ] 2>/dev/null || show_help
         KFLAGS="$KFLAGS --kubeconfig=$1"
         shift
       ;;
@@ -383,3 +384,4 @@
   pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
+
