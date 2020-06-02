@@ -45,6 +45,7 @@
     echo -e "  --force\t\tForce deletion of stucked namespaces even if a clean deletion fail"
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
     echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
+    echo -e "  --kubeconfig {string}\tUse specified kubeconfig file"
     echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
@@ -97,6 +98,13 @@
         TIME=$1
         shift
       ;;
+      --kubeconfig)
+        shift
+        # Check if the port is a number
+        [ -z "$1" ] 2>/dev/null || show_help
+        KFLAGS="$KFLAGS $1"
+        shift
+      ;;
       --no-color)
         C=''; M=''; B=''; Y=''; G=''; R=''; S=''; A=''
         shift
@@ -143,6 +151,9 @@
     printf "\r.: $Y$MSG...$G ok      $S$N" 
     set -u; IFS="$OLD_IFS"; export CLEAN=0
   }  
+
+# Append additional kubectl flags
+  K="$K $KFLAGS"
 
 # Check if kubectl is available
   pp t1 "Kubernetes NameSpace Killer"
@@ -372,3 +383,4 @@
   pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
+
