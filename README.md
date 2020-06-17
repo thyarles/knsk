@@ -29,9 +29,9 @@ Just to see what are the possible commands to solve the problem by yourself, use
     --dry-run             Show what will be executed instead of execute it (use with '--delete-*' options)
     --skip-tls            Set --insecure-skip-tls-verify on kubectl call
     --delete-api          Delete broken API found in your Kubernetes cluster
-    --delete-resource     Delete resources found in your stucked namespaces
-    --delete-all          Delete resources of stucked namespaces and broken API
-    --force               Force deletion of stucked namespaces even if a clean deletion fail
+    --delete-resource     Delete resources found in your stuck namespaces
+    --delete-all          Delete resources of stuck namespaces and broken API
+    --force               Force deletion of stuck namespaces even if a clean deletion fail
     --port {number}       Up kubectl proxy on this port, default is 8765
     --timeout {number}    Max time (in seconds) to wait for Kubectl commands
     --no-color            All output without colors (useful for scripts)

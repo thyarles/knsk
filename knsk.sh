@@ -40,10 +40,10 @@
     echo -e "  --dry-run\t\tShow what will be executed instead of execute it (use with '--delete-*' options)"
     echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
     echo -e "  --delete-api\t\tDelete broken API found in your Kubernetes cluster"
-    echo -e "  --delete-resource\tDelete stucked resources found in your stucked namespaces"
+    echo -e "  --delete-resource\tDelete stuck resources found in your stuck namespaces"
     echo -e "  --delete-orphan\tDelete orphan resources found in your cluster"
-    echo -e "  --delete-all\t\tDelete resources of stucked namespaces and broken API"
-    echo -e "  --force\t\tForce deletion of stucked namespaces even if a clean deletion fail"
+    echo -e "  --delete-all\t\tDelete resources of stuck namespaces and broken API"
+    echo -e "  --force\t\tForce deletion of stuck namespaces even if a clean deletion fail"
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
     echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
     echo -e "  --kubeconfig {string}\tUse specified kubeconfig file"
@@ -190,8 +190,8 @@
     [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes does a clean namespace deletion"
   fi
 
-# Search for resources in stucked namespaces
-  pp t2n "Checking for stucked namespaces"
+# Search for resources in stuck namespaces
+  pp t2n "Checking for stuck namespaces"
   NSS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
   if [ "x$NSS" == "x" ]; then
     pp nfound
@@ -236,8 +236,8 @@
     [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
 
-# Search for stucked resources in cluster
-  pp t2n "Checking for stucked resources in the cluster"
+# Search for stuck resources in cluster
+  pp t2n "Checking for stuck resources in the cluster"
   ORS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
       xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null | grep Terminating)
   OLD_IFS=$IFS; IFS=$'\n'
@@ -319,10 +319,10 @@
   IFS=$OLD_IFS
   [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to Kubernetes sync"
 
-# Search for resisted stucked namespaces and force deletion if --force is passed
+# Search for resisted stuck namespaces and force deletion if --force is passed
   if (( $FORCE )); then
 
-    pp t2 "Forcing deletion of stucked namespaces"
+    pp t2 "Forcing deletion of stuck namespaces"
 
     # Check if --force is used without --delete-resouce
     pp t3n "Checking compliance of --force option"
@@ -345,7 +345,7 @@
     pp ok
 
     # Force namespace deletion
-    pp t3n "Checking for resisted stucked namespaces to force deletion"
+    pp t3n "Checking for resisted stuck namespaces to force deletion"
     NSS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
     if [ "x$NSS" == "x" ]; then
       pp nfound
