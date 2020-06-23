@@ -13,7 +13,6 @@
 # Variables
   set -u       # Ensure declaration of variables before use it
   K='kubectl'  # Short for kubectl
-  KFLAGS=''    # kubectl extra flags
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
   DELORP=0     # Don't delete orphan resources by default
@@ -46,7 +45,6 @@
     echo -e "  --force\t\tForce deletion of stuck namespaces even if a clean deletion fail"
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
     echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
-    echo -e "  --kubeconfig {string}\tUse specified kubeconfig file"
     echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
@@ -99,13 +97,6 @@
         TIME=$1
         shift
       ;;
-      --kubeconfig)
-        shift
-        # Check if the kubeconfig is empty
-        [ -n "$1" ] 2>/dev/null || show_help
-        KFLAGS="$KFLAGS --kubeconfig=$1"
-        shift
-      ;;
       --no-color)
         C=''; M=''; B=''; Y=''; G=''; R=''; S=''; A=''
         shift
@@ -152,9 +143,6 @@
     printf "\r.: $Y$MSG...$G ok      $S$N" 
     set -u; IFS="$OLD_IFS"; export CLEAN=0
   }  
-
-# Append additional kubectl flags
-  K="$K $KFLAGS"
 
 # Check if kubectl is available
   pp t1 "Kubernetes NameSpace Killer"
