@@ -148,7 +148,7 @@
   pp t1 "Kubernetes NameSpace Killer"
   pp t2n "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
-  [ $E -gt 0 ] && pp fail "Check if the kubeclt is installed and configured"
+  [ $E -gt 0 ] && pp fail "Check if the kubectl is installed and configured"
   pp ok
 
 # Check for broken APIs
