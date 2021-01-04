@@ -1,6 +1,6 @@
 # knsk - Kubernetes namespace killer
 
-This tool is aimed to kill namespaces that are stuck in Terminating mode after you try to delete them. Just calling this script without flags, it shows you the possible problems that put your namespace in forever terminating mode.
+This script is aimed to kill namespaces that are stuck in Terminating mode after you try to delete them. Just calling this script without flags, it shows you the possible problems that put your namespace in forever terminating mode.
 
 It automates the tips by https://github.com/alvaroaleman in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
 
