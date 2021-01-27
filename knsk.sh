@@ -13,11 +13,14 @@
 # Variables
   set -u       # Ensure declaration of variables before use it
   K='kubectl'  # Short for kubectl
+               # TODO: Check version of kubectl and work only for 1.16 and upper
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
   DELORP=0     # Don't delete orphan resources by default
+               # TODO: Change the way to check ofr orphan resources
   DRYRUN=0     # Show the commands to be executed and don't run them
   FORCE=0      # Don't force deletion with kubeclt proxy by default
+               # TODO: If in k8s 1.17 or upper, try go get the reason of delayed ns deletion
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
