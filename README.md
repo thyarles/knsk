@@ -10,8 +10,8 @@ If it doesn't work for you, please, let me know. It is hard to force namespace i
 
 Just call the script to make a backup of all cluster in YAML format, ordered by folder:
 
-     curl -s https://raw.githubusercontent.com/thyarles/knsk/master/bakup-yaml.sh | bash 
-     wget -q https://raw.githubusercontent.com/thyarles/knsk/master/bakup-yaml.sh -O - | bash 
+     curl -s https://raw.githubusercontent.com/thyarles/knsk/master/backup-yaml.sh | bash 
+     wget -q https://raw.githubusercontent.com/thyarles/knsk/master/backup-yaml.sh -O - | bash 
 
 ### Basic usage
      curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | bash 
