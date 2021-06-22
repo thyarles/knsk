@@ -19,11 +19,11 @@ Just call the script to make a backup of all cluster in YAML format, ordered by 
      
 In this mode, this script only shows the possible causes that put your namespaces in **Terminating** mode. If you want this script to try to fix the mess, clone this repository, set the execution bit to the `knsk.sh` script and look at advanced options by typing `./knsk.sh --help`.
 
-Just to see what are the possible commands to solve the problem by yourself, use the advanced mode like
+Just to see what are the possible commands to solve the problem by yourself, use the dry-run mode like
 
      ./knsk.sh --dry-run --delete-all --force
 
-### Advanced options
+### Options
     knsk.sh [options]
 
     --dry-run             Show what will be executed instead of execute it (use with '--delete-*' options)
