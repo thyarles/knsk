@@ -201,7 +201,8 @@
           pp t4n $RES 
           if (( $DELRES )); then
             CMD1="timeout $TIME $K -n $NS --grace-period=0 --force=true delete $RES"
-            CMD2="timeout $TIME $K -n $NS patch $RES -p '{\"metadata\":{\"finalizers\":null}}'"
+            CMD2="timeout $TIME $K -n $NS patch $RES --type json \
+            --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
             if (( $DRYRUN )); then
               pp dryrun
               pp t4d "$CMD1"
@@ -212,7 +213,7 @@
               $CMD1 >& /dev/null; E=$?
               if [ $E -gt 0 ]; then 
                 # Try to delete by patching
-                $CMD2 >& /dev/null; E=$?
+                bash -c "${CMD2}" >& /dev/null; E=$?
                 if [ $E -gt 0 ]; then pp error; else pp del; fi
               else
                 pp del
@@ -242,7 +243,8 @@
       pp t3n "Stucked -> $R$NRS$S$Y on namespace $R$NOS$S"
       if (( $DELRES )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS"
-        CMD2="timeout $TIME $K -n $NOS patch $NRS -p '{\"metadata\":{\"finalizers\":null}}'"
+        CMD2="timeout $TIME $K -n $NOS patch $NRS --type json \
+            --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
         if (( $DRYRUN )); then
           pp dryrun
           pp t3d "$CMD1"
@@ -253,7 +255,7 @@
           $CMD1 >& /dev/null; E=$?
           if [ $E -gt 0 ]; then 
             # Try to delete by patching            
-            $CMD2 >& /dev/null; E=$?
+            bash -c "${CMD2}" >& /dev/null; E=$?
             if [ $E -gt 0 ]; then pp error; else pp del; fi
           else
             pp del
@@ -284,7 +286,8 @@
       pp t3n "Found $R$KND/$NRS$S$Y on deleted namespace $R$NOS$S"
       if (( $DELORP )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $KND/$NRS"
-        CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS -p '{\"metadata\":{\"finalizers\":null}}'"
+        CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS --type json \
+            --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
         if (( $DRYRUN )); then
           pp dryrun
           pp t3d "$CMD1"
@@ -295,7 +298,7 @@
           $CMD1 >& /dev/null; E=$?
           if [ $E -gt 0 ]; then 
             # Try to delete by patching            
-            $CMD2 >& /dev/null; E=$?
+            bash -c "${CMD2}" >& /dev/null; E=$?
             if [ $E -gt 0 ]; then pp error; else pp del; fi
           else
             pp del
