@@ -49,6 +49,7 @@
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
     echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
     echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
+    echo -e "  --kubeconfig {path}\tThe path to a custom kubeconfig.yaml file (useful for scripts)"
     echo -e "  -h --help\t\tShow this help\n"
     exit 0
   }
@@ -102,6 +103,13 @@
       ;;
       --no-color)
         C=''; M=''; B=''; Y=''; G=''; R=''; S=''; A=''
+        shift
+      ;;
+      --kubeconfig)
+        shift
+        # Check if the kubeconfig exists
+        [ ! -f "$1" ] && show_help
+        K="${K} --kubeconfig $1"
         shift
       ;;
       *) show_help
