@@ -325,7 +325,7 @@
 
     # Check if --force is used without --delete-resouce
     pp t3n "Checking compliance of --force option"
-    (( $DELRES )) || pp fail "The '--force' option must be used with '--delelete-all' or '--delete-resource options'"
+    (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource options'"
     pp ok
     
     # Try to get the access token
