@@ -61,7 +61,7 @@
         DRYRUN=1
         shift
       ;;
-      --skip-tls)	
+      --skip-tls)
         K=$K" --insecure-skip-tls-verify"
         shift
       ;;
@@ -124,7 +124,7 @@
       t1    ) echo  -e "$N$G$2$S"                        ;;
       t2    ) echo  -e "$N$Y$2$S"                        ;;
       t3    ) echo  -e "$Y.: $2"                         ;;
-      t4    ) echo  -e "$Y   > $2"                       ;;  
+      t4    ) echo  -e "$Y   > $2"                       ;;
       t2n   ) echo -ne "$N$Y$2...$S"                     ;;
       t3n   ) echo -ne "$Y.: $2...$S"                    ;;
       t3d   ) echo  -e "$A   $2"                         ;;
@@ -151,9 +151,9 @@
       SECS=$(( $SECS - 1 ))
       wait
     done
-    printf "\r.: $Y$MSG...$G ok      $S$N" 
+    printf "\r.: $Y$MSG...$G ok      $S$N"
     set -u; IFS="$OLD_IFS"; export CLEAN=0
-  }  
+  }
 
 # Check if kubectl is available
   pp t1 "Kubernetes NameSpace Killer"
@@ -174,7 +174,7 @@
       pp t3n "Broken -> $R$API$S"
       if (( $DELBRK )); then
         CMD="timeout $TIME $K delete apiservice $API"
-        if (( $DRYRUN )); then 
+        if (( $DRYRUN )); then
           pp dryrun
           pp t3d "$CMD"
         else
@@ -199,17 +199,18 @@
     for NS in $NSS; do
       pp t3n "Checking resources in namespace $R$NS$S"
       RESS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
-           xargs -n 1 $K get -n $NS --no-headers=true --show-kind=true 2>/dev/null | \
+           xargs -P 0 -n 1 $K get -n $NS --no-headers=true --show-kind=true 2>/dev/null | \
            grep -v Cancelling | cut -f1 -d ' ')
       if [ "x$RESS" == "x" ]; then
         pp nfound
       else
         pp found
         for RES in $RESS; do
-          pp t4n $RES 
+          pp t4n $RES
           if (( $DELRES )); then
             CMD1="timeout $TIME $K -n $NS --grace-period=0 --force=true delete $RES"
-            CMD2="timeout $TIME $K -n $NS patch $RES -p '{\"metadata\":{\"finalizers\":null}}'"
+            CMD2="timeout $TIME $K -n $NS patch $RES --type json \
+            --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
             if (( $DRYRUN )); then
               pp dryrun
               pp t4d "$CMD1"
@@ -218,9 +219,9 @@
               CLEAN=1
               # Try to delete by delete command
               $CMD1 >& /dev/null; E=$?
-              if [ $E -gt 0 ]; then 
+              if [ $E -gt 0 ]; then
                 # Try to delete by patching
-                $CMD2 >& /dev/null; E=$?
+                bash -c "${CMD2}" >& /dev/null; E=$?
                 if [ $E -gt 0 ]; then pp error; else pp del; fi
               else
                 pp del
@@ -229,8 +230,8 @@
           else
             pp skip
           fi
-        done        
-      fi      
+        done
+      fi
     done
     [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to see if Kubernetes do a clean namespace deletion"
   fi
@@ -238,19 +239,20 @@
 # Search for stuck resources in cluster
   pp t2n "Checking for stuck resources in the cluster"
   ORS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
-      xargs -n 1 $K get -A --show-kind --no-headers 2>/dev/null | grep Terminating)
+      xargs -P 0 -n 1 $K get -A --show-kind --no-headers 2>/dev/null | grep Terminating)
   OLD_IFS=$IFS; IFS=$'\n'
   if [ "x$ORS" = "x" ]; then
     pp nfound
   else
     pp found
     for OR in $ORS; do
-      NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)      
+      NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)
       NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
       pp t3n "Stucked -> $R$NRS$S$Y on namespace $R$NOS$S"
       if (( $DELRES )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS"
-        CMD2="timeout $TIME $K -n $NOS patch $NRS -p '{\"metadata\":{\"finalizers\":null}}'"
+        CMD2="timeout $TIME $K -n $NOS patch $NRS --type json \
+            --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
         if (( $DRYRUN )); then
           pp dryrun
           pp t3d "$CMD1"
@@ -259,9 +261,9 @@
           CLEAN=1
           # Try to delete by delete command
           $CMD1 >& /dev/null; E=$?
-          if [ $E -gt 0 ]; then 
-            # Try to delete by patching            
-            $CMD2 >& /dev/null; E=$?
+          if [ $E -gt 0 ]; then
+            # Try to delete by patching
+            bash -c "${CMD2}" >& /dev/null; E=$?
             if [ $E -gt 0 ]; then pp error; else pp del; fi
           else
             pp del
@@ -278,11 +280,11 @@
 # Search for orphan resources in the cluster
   pp t2n "Checking for orphan resources in the cluster"
   ORS=$($K api-resources --verbs=list --namespaced -o name 2>/dev/null | \
-      xargs -n 1 $K get -A --no-headers -o custom-columns=NS:.metadata.namespace,KIND:.kind,NAME:.metadata.name 2>/dev/null)
+      xargs -P 0 -n 1 $K get -A --no-headers -o custom-columns=NS:.metadata.namespace,KIND:.kind,NAME:.metadata.name 2>/dev/null)
   OLD_IFS=$IFS; IFS=$'\n'; PRINTED=0
   NSS=$($K get ns --no-headers 2>/dev/null | cut -f1 -d ' ')  # All existing mamespaces
   for OR in $ORS; do
-    NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)      
+    NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)
     KND=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
     NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f3)
     # Check if the resource belongs an existent namespace
@@ -292,7 +294,8 @@
       pp t3n "Found $R$KND/$NRS$S$Y on deleted namespace $R$NOS$S"
       if (( $DELORP )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $KND/$NRS"
-        CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS -p '{\"metadata\":{\"finalizers\":null}}'"
+        CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS --type json \
+            --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
         if (( $DRYRUN )); then
           pp dryrun
           pp t3d "$CMD1"
@@ -301,9 +304,9 @@
           CLEAN=1
           # Try to delete by delete command
           $CMD1 >& /dev/null; E=$?
-          if [ $E -gt 0 ]; then 
-            # Try to delete by patching            
-            $CMD2 >& /dev/null; E=$?
+          if [ $E -gt 0 ]; then
+            # Try to delete by patching
+            bash -c "${CMD2}" >& /dev/null; E=$?
             if [ $E -gt 0 ]; then pp error; else pp del; fi
           else
             pp del
@@ -327,7 +330,7 @@
     pp t3n "Checking compliance of --force option"
     (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource options'"
     pp ok
-    
+
     # Try to get the access token
     pp t3n "Getting the access token to force deletion"
     TOKEN=$($K -n default describe secret \
