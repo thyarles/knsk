@@ -17,7 +17,7 @@ Just call the script to make a backup of all cluster in YAML format, ordered by 
      curl -s https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh | bash 
      wget -q https://raw.githubusercontent.com/thyarles/knsk/master/knsk.sh -O - | bash 
      
-In this mode, this script only shows the possible causes that put your namespaces in **Terminating** mode. If you want this script to try to fix the mess, clone this repository, set the execution bit to the `knsk.sh` script and look at advanced options by typing `./knsk.sh --help`.
+In this mode, this script only shows the possible causes that put your namespaces in **Terminating** mode. If you want this script to try to fix the mess, clone this repository, set the execution bit to the `knsk.sh` script doing `chmod +x knsk.sh` and look at advanced options by typing `./knsk.sh --help`.
 
 Just to see what are the possible commands to solve the problem by yourself, use the dry-run mode like
 
