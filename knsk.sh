@@ -248,7 +248,7 @@
     for OR in $ORS; do
       NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)
       NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
-      pp t3n "Stucked -> $R$NRS$S$Y on namespace $R$NOS$S"
+      pp t3n "Stuck -> $R$NRS$S$Y on namespace $R$NOS$S"
       if (( $DELRES )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS"
         CMD2="timeout $TIME $K -n $NOS patch $NRS --type json \
