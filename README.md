@@ -36,3 +36,9 @@ Just to see what are the possible commands to solve the problem by yourself, use
     --timeout {number}    Max time (in seconds) to wait for Kubectl commands
     --no-color            All output without colors (useful for scripts)
     -h --help             Show this help
+
+### Issues
+
+If **knsk** doesn't meet your needs, feel free to open an issue, I'll be happy to help.
+
+Also, you can try the new [nsmurder](https://github.com/achetronic/nsmurder). I've never used it and as far as I know it was made in [Go](https://golang.com). If you are serious about security, you should carefully examine the source code, including (source code of dependencies) before using it. I believe in the developer who made it, he's a nice guy, but I don't believe in the developers of the dependencies the project needs.
