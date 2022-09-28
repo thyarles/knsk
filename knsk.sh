@@ -85,6 +85,7 @@ function isExecutable () {
 function checkVersion () {
   KUBECTL_VERSION=$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")
   [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
+  pad $KUBECTL_VERSION
 }
 
 function checkKubectl () {
