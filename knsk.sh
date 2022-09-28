@@ -94,7 +94,7 @@ function checkKubectl () {
 }
 
 # Set default setup
-KUBECTL='$(which kubectl)'  # Define kubectl location
+KUBECTL=$(which kubectl)    # Define kubectl location
 DELBRK=false                # Don't delete broken API
 DELRES=false                # Don't delete inside resources
 DELORP=false                # Don't delete orphan resources
