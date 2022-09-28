@@ -10,59 +10,118 @@
 #
 # ----------------------------------------------------------------------------
 
-# Variables
-  set -u       # Ensure declaration of variables before use it
-  K='kubectl'  # Short for kubectl
-               # TODO: Check version of kubectl and work only for 1.16 and upper
-  DELBRK=0     # Don't delete broken API by default
-  DELRES=0     # Don't delete inside resources by default
-  DELORP=0     # Don't delete orphan resources by default
-               # TODO: Change the way to check ofr orphan resources
-  DRYRUN=0     # Show the commands to be executed and don't run them
-  FORCE=0      # Don't force deletion with kubeclt proxy by default
-               # TODO: If in k8s 1.17 or upper, try go get the reason of delayed ns deletion
-  CLEAN=0      # Start clean flag
-  FOUND=0      # Start found flag
-  KPORT=8765   # Default port to up kubectl proxy
-  TIME=15      # Default timeout to wait for kubectl command responses
-  WAIT=60      # Default time to wait Kubernetes do clean deletion
-  C='\e[96m'   # Cyan
-  M='\e[95m'   # Magenta
-  B='\e[94m'   # Blue
-  Y='\e[93m'   # Yellow
-  G='\e[92m'   # Green
-  R='\e[91m'   # Red
-  A='\e[90m'   # Gray
-  S='\e[0m'    # Reset
-  N='\n'       # New line
+# Ensure variable declaration
+set -u
 
-# Function to show help
-  show_help () {
-    echo -e "\n$(basename $0) [options]\n"
-    echo -e "  --dry-run\t\tShow what will be executed instead of execute it (use with '--delete-*' options)"
-    echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
-    echo -e "  --delete-api\t\tDelete broken API found in your Kubernetes cluster"
-    echo -e "  --delete-resource\tDelete stuck resources found in your stuck namespaces"
-    echo -e "  --delete-orphan\tDelete orphan resources found in your cluster"
-    echo -e "  --delete-all\t\tDelete resources of stuck namespaces and broken API"
-    echo -e "  --force\t\tForce deletion of stuck namespaces even if a clean deletion fail"
-    echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
-    echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
-    echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
-    echo -e "  --kubeconfig {path}\tThe path to a custom kubeconfig.yaml file (useful for scripts)"
-    echo -e "  -h --help\t\tShow this help\n"
-    exit 0
-  }
+# Welcome message
+echo -e '\n[knsk] Kubernetes Namespace killer'
+
+# Help
+function help () { echo -e "
+  $(basename $0) [options]
+
+  --kubectl {bin}     Where is the kubectl [default to whereis kubectl]
+  --dry-run           Show what will be executed instead of execute it (use with '--delete-*' options)
+  --skip-tls          --insecure-skip-tls-verify on kubectl call
+  --delete-api        Delete broken API found in your Kubernetes cluster
+  --delete-resource   Delete stuck resources found in your stuck namespaces
+  --delete-orphan     Delete orphan resources found in your cluster
+  --delete-all        Delete resources of stuck namespaces and broken API
+  --force             Force deletion of stuck namespaces even if a clean deletion fail
+  --port {number}     Up kubectl proxy on this port, default is 8765
+  --timeout {number}  Max time (in seconds) to wait for Kubectl commands (default = 15)
+  --no-color          All output without colors (useful for scripts)
+  --kubeconfig {path} The path to a custom kubeconfig.yaml file (useful for scripts)\n"
+  exit 1
+}
+
+# Format output messages
+function title () {
+  local MSG=$1
+  echo -e "\n### $MSG\n"
+}
+
+function ok () {
+  local MSG=$1
+  echo -e "[✓] $MSG"
+}
+
+function warn () {
+  local MSG=$1
+  echo -e "[!] $MSG"
+}
+
+function pad () {
+  local MSG=$1
+  echo -e " -  $MSG"
+}
+
+function err () {
+  local MSG=$1
+  local FIX=$2
+  local ERR=$3
+  title "Error"
+  echo -e "[✗] $MSG"
+  pad "$FIX\n"
+  exit $ERR
+}
+
+# Util functions
+function isNumber () {
+  local NUMBER=$1
+   [ "$NUMBER" -eq "$NUMBER" ] 2>/dev/null || help
+}
+
+function fileExists () {
+  local FILE=$1
+  [[ -f $FILE ]] || err "$FILE not found" "Check if the file exists" 1
+}
+
+function isExecutable () {
+  local FILE=$1
+  [[ -x $FILE ]] || err "$FILE not executable" "fix: chmod +x $FILE" 1
+}
+
+function checkVersion () {
+  KUBECTL_VERSION=$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")
+  [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
+}
+
+function checkKubectl () {
+  fileExists $KUBECTL
+  isExecutable $KUBECTL
+  checkVersion
+}
+
+# Set default setup
+KUBECTL='$(which kubectl)'  # Define kubectl location
+DELBRK=false                # Don't delete broken API
+DELRES=false                # Don't delete inside resources
+DELORP=false                # Don't delete orphan resources
+DRYRUN=true                 # Show the commands to be executed instead of run it
+FORCE=false                 # Don't force deletion with kubeclt proxy by default
+PROXY_PORT=8765             # Port to up kubectl proxy
+TIMEOUT=15                  # Timeout to wait for kubectl command responses
+ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
 
 # Check for parameters
+title 'Check parameters'
   while (( "$#" )); do
     case $1 in
+      --kubectl)
+        shift
+        ok "Set kubectl to $1"
+        KUBECTL=$1
+        shift
+      ;;
       --dry-run)
         DRYRUN=1
+        ok "Set dry-run"
         shift
       ;;
       --skip-tls)
-        K=$K" --insecure-skip-tls-verify"
+        KUBECTL="$KUBECTL --insecure-skip-tls-verify"
+        ok "Set insecure tls"
         shift
       ;;
       --delete-api)
@@ -89,33 +148,28 @@
       ;;
       --port)
         shift
-        # Check if the port is a number
-        [ "$1" -eq "$1" ] 2>/dev/null || show_help
-        KPORT=$1
+        isNumber $1
+        PROXY_PORT=$1
         shift
       ;;
       --timeout)
         shift
-        # Check if the time is a number
-        [ "$1" -eq "$1" ] 2>/dev/null || show_help
+        isNumber
         TIME=$1
-        shift
-      ;;
-      --no-color)
-        C=''; M=''; B=''; Y=''; G=''; R=''; S=''; A=''
         shift
       ;;
       --kubeconfig)
         shift
-        # Check if the kubeconfig exists
-        [ ! -f "$1" ] && show_help
-        K="${K} --kubeconfig $1"
+        fileExists $1
+        KUBECTL="$KUBECTL --kubeconfig $1"
         shift
       ;;
-      *) show_help
+      *) help
     esac
   done
+  checkKubectl
 
+exit 100
 # Function to format and print messages
   pp () {
     # First argument is the type of message
