@@ -109,7 +109,7 @@ KUBECTL=$(which kubectl)    # Define kubectl location
 DEL_BROKEN_API=false        # Don't delete broken API
 DEL_STUCK=false             # Don't delete inside resources
 DEL_ORPHAN=false            # Don't delete orphan resources
-DRYRUN=true                 # Show the commands to be executed instead of run it
+DRY_RUN=true                # Show the commands to be executed instead of run it
 FORCE=false                 # Don't force deletion with kubeclt proxy by default
 PROXY_PORT=8765             # Port to up kubectl proxy
 TIMEOUT=15                  # Timeout to wait for kubectl command responses
@@ -125,9 +125,15 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         KUBECTL=$1
         shift
       ;;
-      --dry-run)
-        DRYRUN=1
-        ok "Set dry-run"
+      --not-dry-run)
+        DRY_RUN=false
+        ok "Set not dry run"
+        # If CI env, avoid confirmation
+        if [[ -z CI ]]; then
+          pad "are you sure about it?"
+          pad "press any key to continue..."
+          read
+        fi
         shift
       ;;
       --skip-tls)
@@ -215,7 +221,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
       pp t3n "Broken -> $R$API$S"
       if (( $DEL_BROKEN_API )); then
         CMD="timeout $TIME $K delete apiservice $API"
-        if (( $DRYRUN )); then
+        if (( $DRY_RUN )); then
           pp dryrun
           pp t3d "$CMD"
         else
@@ -252,7 +258,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
             CMD1="timeout $TIME $K -n $NS --grace-period=0 --force=true delete $RES"
             CMD2="timeout $TIME $K -n $NS patch $RES --type json \
             --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
-            if (( $DRYRUN )); then
+            if (( $DRY_RUN )); then
               pp dryrun
               pp t4d "$CMD1"
               pp t4d "$CMD2"
@@ -294,7 +300,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS"
         CMD2="timeout $TIME $K -n $NOS patch $NRS --type json \
             --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
-        if (( $DRYRUN )); then
+        if (( $DRY_RUN )); then
           pp dryrun
           pp t3d "$CMD1"
           pp t3d "$CMD2"
@@ -337,7 +343,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $KND/$NRS"
         CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS --type json \
             --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
-        if (( $DRYRUN )); then
+        if (( $DRY_RUN )); then
           pp dryrun
           pp t3d "$CMD1"
           pp t3d "$CMD2"
@@ -405,7 +411,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         fi
         CMD="curl -s -o $TMP.log -X PUT --data-binary @$TMP http://localhost:$KPORT/api/v1/namespaces/$NS/finalize \
                   -H \"Content-Type: application/json\" --header \"Authorization: Bearer $TOKEN\" --insecure"
-        if (( $DRYRUN )); then
+        if (( $DRY_RUN )); then
           pp dryrun
           pp t4d "$CMD"
         else
