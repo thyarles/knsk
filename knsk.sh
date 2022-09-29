@@ -129,8 +129,8 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         DRY_RUN=false
         ok "Set not dry run"
         # If CI env, avoid confirmation
-        CI=$CI
-        if [[ -z $CI ]]; then
+        CI="x$CI"
+        if [[ $CI == "x" ]]; then
           pad "are you sure about it?"
           pad "press any key to continue..."
           read
