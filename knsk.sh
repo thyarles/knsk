@@ -37,7 +37,7 @@ function help () {
 }
 
 # Format output messages
-function title () {
+function section () {
   local MSG=$1
   echo -e "\n### $MSG\n"
 }
@@ -61,7 +61,7 @@ function err () {
   local MSG=$1
   local FIX=$2
   local ERR=$3
-  title "Error"
+  section "Error"
   echo -e "[✗] $MSG"
   pad "$FIX\n"
   exit $ERR
@@ -114,7 +114,7 @@ TIMEOUT=15                  # Timeout to wait for kubectl command responses
 ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
 
 # Check for parameters
-title 'Check parameters'
+section 'Check parameters'
   while (( "$#" )); do
     case $1 in
       --kubectl)
@@ -188,6 +188,7 @@ title 'Check parameters'
         err $1 "$(basename $0) --help" 2
     esac
   done
+  section "Kubeclt and kubernetes cluster"
   checkKubectl
 
   exit 100
