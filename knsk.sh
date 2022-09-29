@@ -174,13 +174,11 @@ title 'Check parameters'
         KUBECTL="$KUBECTL --kubeconfig $1"
         shift
       ;;
-      --help -h)
-        shift
+      --help)
         help
       ;;
       *)
         err $1 'Check help section passing --help flag' 2
-        help
     esac
   done
   checkKubectl
