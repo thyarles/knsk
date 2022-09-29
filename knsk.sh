@@ -156,13 +156,13 @@ title 'Check parameters'
       --port)
         shift
         isNumber $1
-        ok "Set kubectle proxy port = $1"
+        ok "Set kubectl proxy port = $1"
         PROXY_PORT=$1
         shift
       ;;
       --timeout)
         shift
-        isNumber
+        isNumber $1
         ok "Set timeout to $1 seconds"
         TIME=$1
         shift
