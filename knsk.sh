@@ -119,7 +119,6 @@ section 'Check parameters'
     case $1 in
       --kubectl)
         shift
-        ok "Set kubectl to $1"
         KUBECTL=$1
         shift
       ;;
@@ -188,6 +187,7 @@ section 'Check parameters'
         err $1 "$(basename $0) --help" 2
     esac
   done
+  ok "Set kubectl to $1"
   section "Kubeclt and kubernetes cluster"
   checkKubectl
 
