@@ -63,7 +63,7 @@ function err () {
   local ERR=$3
   section "Error"
   echo -e "[✗] $MSG"
-  pad "$FIX\n"
+  pad "try this: $FIX\n"
   exit $ERR
 }
 
@@ -96,6 +96,7 @@ function checkCluster () {
 }
 
 function checkKubectl () {
+  [[ -z $KUBECTL ]] && err "kubectl not found" "$(basename $0) --kubectl /path/kubectl" 1
   fileExists $KUBECTL
   isExecutable $KUBECTL
   pad "kubectl to be used $KUBECTL"
@@ -106,8 +107,8 @@ function checkKubectl () {
 # Set default setup
 KUBECTL=$(which kubectl)    # Define kubectl location
 DEL_BROKEN_API=false        # Don't delete broken API
-DEL_STUCK=false                # Don't delete inside resources
-DEL_ORPHAN=false                # Don't delete orphan resources
+DEL_STUCK=false             # Don't delete inside resources
+DEL_ORPHAN=false            # Don't delete orphan resources
 DRYRUN=true                 # Show the commands to be executed instead of run it
 FORCE=false                 # Don't force deletion with kubeclt proxy by default
 PROXY_PORT=8765             # Port to up kubectl proxy
@@ -115,7 +116,7 @@ TIMEOUT=15                  # Timeout to wait for kubectl command responses
 ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
 
 # Check for parameters
-  if [[ $# -gt 0 ]] && section 'Check parameters' 
+  [[ $# -gt 0 ]] && section 'Check parameters' 
   while (( "$#" )); do
     case $1 in
       --kubectl)
