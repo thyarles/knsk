@@ -22,7 +22,7 @@ function help () {
   $(basename $0) [options]
 
   --kubectl {bin}     Where is the kubectl [default to whereis kubectl]
-  --dry-run           Show what will be executed instead of execute it (use with '--delete-*' options)
+  --not-dry-run       Execute the commands for real (take care with it)
   --skip-tls          --insecure-skip-tls-verify on kubectl call
   --delete-broken-api Delete broken API found in your Kubernetes cluster
   --delete-stuck      Delete stuck resources found in your stuck namespaces
@@ -129,7 +129,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         DRY_RUN=false
         ok "Set not dry run"
         # If CI env, avoid confirmation
-        if [[ -z CI ]]; then
+        if [[ -z $CI ]]; then
           pad "are you sure about it?"
           pad "press any key to continue..."
           read
