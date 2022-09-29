@@ -187,7 +187,7 @@ section 'Check parameters'
         err $1 "$(basename $0) --help" 2
     esac
   done
-  ok "Set kubectl to $1"
+  ok "Set kubectl to $KUBECTL"
   section "Kubeclt and kubernetes cluster"
   checkKubectl
 
