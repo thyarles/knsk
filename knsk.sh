@@ -90,7 +90,7 @@ function checkVersion () {
 }
 
 function checkCluster () {
-  local CLUSTER_INFO="$($KUBECTL cluster-info | head 1)"
+  local CLUSTER_INFO="$($KUBECTL cluster-info | head -1)"
   [[ -n $CLUSTER_INFO ]] || err "The cluster is not reachable" 1
   pad "$CLUSTER_INFO"
 }
