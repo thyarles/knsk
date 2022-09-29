@@ -98,6 +98,7 @@ function checkCluster () {
 function checkKubectl () {
   fileExists $KUBECTL
   isExecutable $KUBECTL
+  pad "kubectl to be used $KUBECTL"
   checkVersion
   checkCluster
 }
@@ -114,11 +115,12 @@ TIMEOUT=15                  # Timeout to wait for kubectl command responses
 ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
 
 # Check for parameters
-section 'Check parameters'
+  if [[ $# -gt 0 ]] && section 'Check parameters' 
   while (( "$#" )); do
     case $1 in
       --kubectl)
         shift
+        ok "Set kubectl to $KUBECTL"
         KUBECTL=$1
         shift
       ;;
@@ -187,13 +189,13 @@ section 'Check parameters'
         err $1 "$(basename $0) --help" 2
     esac
   done
-  ok "Set kubectl to $KUBECTL"
-  section "Kubeclt and kubernetes cluster"
+
+# Check kubectl and cluster
+  section "Check Kubernetes cluster"
   checkKubectl
 
   exit 100
 
-# Check if kubectl is available
   pp t1 "Kubernetes NameSpace Killer"
   pp t2n "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
