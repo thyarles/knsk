@@ -70,7 +70,7 @@ function err () {
 # Util functions
 function isNumber () {
   local NUMBER=$1
-   [ "$NUMBER" -eq "$NUMBER" ] 2>/dev/null || help
+   [ "$NUMBER" -eq "$NUMBER" ] 2>/dev/null || err "$NUMBER must be a number" "$(basename $0) --help" 1
 }
 
 function fileExists () {
@@ -178,7 +178,7 @@ title 'Check parameters'
         help
       ;;
       *)
-        err $1 'Check help section passing --help flag' 2
+        err $1 "$(basename $0) --help" 2
     esac
   done
   checkKubectl
