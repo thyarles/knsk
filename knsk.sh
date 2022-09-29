@@ -84,15 +84,22 @@ function isExecutable () {
 }
 
 function checkVersion () {
-  KUBECTL_VERSION="$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")"
+  local KUBECTL_VERSION="$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")"
   [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
   pad "$KUBECTL_VERSION"
+}
+
+function checkCluster () {
+  local CLUSTER_INFO="$($KUBECTL cluster-info | head 1)"
+  [[ -n $CLUSTER_INFO ]] || err "The cluster is not reachable" 1
+  pad "$CLUSTER_INFO"
 }
 
 function checkKubectl () {
   fileExists $KUBECTL
   isExecutable $KUBECTL
   checkVersion
+  checkCluster
 }
 
 # Set default setup
@@ -183,45 +190,7 @@ title 'Check parameters'
   done
   checkKubectl
 
-exit 100
-# Function to format and print messages
-  pp () {
-    # First argument is the type of message
-    # Second argument is the message
-    case $1 in
-      t1    ) echo  -e "$N$G$2$S"                        ;;
-      t2    ) echo  -e "$N$Y$2$S"                        ;;
-      t3    ) echo  -e "$Y.: $2"                         ;;
-      t4    ) echo  -e "$Y   > $2"                       ;;
-      t2n   ) echo -ne "$N$Y$2...$S"                     ;;
-      t3n   ) echo -ne "$Y.: $2...$S"                    ;;
-      t3d   ) echo  -e "$A   $2"                         ;;
-      t4n   ) echo -ne "$Y   > $2...$S"                  ;;
-      t4d   ) echo  -e "$A     $2$S"                     ;;
-      ok    ) echo  -e "$G ok$S"                         ;;
-      found ) echo  -e "$C found$S"; FOUND=1             ;;
-      nfound) echo  -e "$G not found$S"                  ;;
-      dryrun) echo  -e "$M dry-run$S"                    ;;
-      del   ) echo  -e "$G deleted$S"                    ;;
-      skip  ) echo  -e "$C deletion skipped$S"           ;;
-      error ) echo  -e "$R error$S"                      ;;
-      fail  ) echo  -e "$R fail$S$N$R$N$2.$S$N"
-              exit 1
-    esac
-  }
-
-# Function to sleep for a while
-  timer () {
-    OLD_IFS="$IFS"; IFS=:; set -- $*; SECS=$1; MSG=$2
-    while [ $SECS -gt 0 ]; do
-      sleep 1 &
-      printf "\r.: $Y$MSG$S... $G%02d:%02d$S" $(( (SECS/60)%60)) $((SECS%60))
-      SECS=$(( $SECS - 1 ))
-      wait
-    done
-    printf "\r.: $Y$MSG...$G ok      $S$N"
-    set -u; IFS="$OLD_IFS"; export CLEAN=0
-  }
+  exit 100
 
 # Check if kubectl is available
   pp t1 "Kubernetes NameSpace Killer"
