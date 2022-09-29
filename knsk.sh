@@ -17,14 +17,15 @@ set -u
 echo -e '\n[knsk] Kubernetes Namespace killer'
 
 # Help
-function help () { echo -e "
+function help () {
+  echo -e "
   $(basename $0) [options]
 
   --kubectl {bin}     Where is the kubectl [default to whereis kubectl]
   --dry-run           Show what will be executed instead of execute it (use with '--delete-*' options)
   --skip-tls          --insecure-skip-tls-verify on kubectl call
-  --delete-api        Delete broken API found in your Kubernetes cluster
-  --delete-resource   Delete stuck resources found in your stuck namespaces
+  --delete-broken-api Delete broken API found in your Kubernetes cluster
+  --delete-stuck      Delete stuck resources found in your stuck namespaces
   --delete-orphan     Delete orphan resources found in your cluster
   --delete-all        Delete resources of stuck namespaces and broken API
   --force             Force deletion of stuck namespaces even if a clean deletion fail
@@ -96,9 +97,9 @@ function checkKubectl () {
 
 # Set default setup
 KUBECTL=$(which kubectl)    # Define kubectl location
-DELBRK=false                # Don't delete broken API
-DELRES=false                # Don't delete inside resources
-DELORP=false                # Don't delete orphan resources
+DEL_BROKEN_API=false        # Don't delete broken API
+DEL_STUCK=false                # Don't delete inside resources
+DEL_ORPHAN=false                # Don't delete orphan resources
 DRYRUN=true                 # Show the commands to be executed instead of run it
 FORCE=false                 # Don't force deletion with kubeclt proxy by default
 PROXY_PORT=8765             # Port to up kubectl proxy
@@ -125,43 +126,51 @@ title 'Check parameters'
         ok "Set insecure tls"
         shift
       ;;
-      --delete-api)
-        DELBRK=1
+      --delete-broken)
+        ok "Set delete broken API"
+        DEL_BROKEN_API=1
         shift
       ;;
-      --delete-resource)
-        DELRES=1
+      --delete-stuck)
+        ok "Set delete stuck reources"
+        DEL_STUCK=1
         shift
       ;;
       --delete-orphan)
-        DELORP=1
+        ok "Set delete orphan reources"
+        DEL_ORPHAN=1
         shift
       ;;
       --delete-all)
-        DELBRK=1
-        DELRES=1
-        DELORP=1
+        ok "Set delete broken API, stuck, and orphan reources"
+        DEL_BROKEN_API=1
+        DEL_STUCK=1
+        DEL_ORPHAN=1
         shift
       ;;
       --force)
+        ok "Set force = true"
         FORCE=1
         shift
       ;;
       --port)
         shift
         isNumber $1
+        ok "Set kubectle proxy port = $1"
         PROXY_PORT=$1
         shift
       ;;
       --timeout)
         shift
         isNumber
+        ok "Set timeout to $1 seconds"
         TIME=$1
         shift
       ;;
       --kubeconfig)
         shift
         fileExists $1
+        ok "Set kubeconfig to $1"
         KUBECTL="$KUBECTL --kubeconfig $1"
         shift
       ;;
@@ -227,7 +236,7 @@ exit 100
     pp found   # Something found, let's deep in
     for API in $APIS; do
       pp t3n "Broken -> $R$API$S"
-      if (( $DELBRK )); then
+      if (( $DEL_BROKEN_API )); then
         CMD="timeout $TIME $K delete apiservice $API"
         if (( $DRYRUN )); then
           pp dryrun
@@ -262,7 +271,7 @@ exit 100
         pp found
         for RES in $RESS; do
           pp t4n $RES
-          if (( $DELRES )); then
+          if (( $DEL_STUCK )); then
             CMD1="timeout $TIME $K -n $NS --grace-period=0 --force=true delete $RES"
             CMD2="timeout $TIME $K -n $NS patch $RES --type json \
             --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
@@ -304,7 +313,7 @@ exit 100
       NOS=$(echo $OR | tr -s ' ' | cut -d ' ' -f1)
       NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
       pp t3n "Stuck -> $R$NRS$S$Y on namespace $R$NOS$S"
-      if (( $DELRES )); then
+      if (( $DEL_STUCK )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $NRS"
         CMD2="timeout $TIME $K -n $NOS patch $NRS --type json \
             --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
@@ -347,7 +356,7 @@ exit 100
     if (( $NOTOK )); then
       (( $PRINTED )) || pp found && PRINTED=1
       pp t3n "Found $R$KND/$NRS$S$Y on deleted namespace $R$NOS$S"
-      if (( $DELORP )); then
+      if (( $DEL_ORPHAN )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $KND/$NRS"
         CMD2="timeout $TIME $K -n $NOS patch $KND/$NRS --type json \
             --patch='[ { \"op\": \"remove\", \"path\": \"/metadata/finalizers\" } ]'"
@@ -383,7 +392,7 @@ exit 100
 
     # Check if --force is used without --delete-resouce
     pp t3n "Checking compliance of --force option"
-    (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource options'"
+    (( $DEL_STUCK )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource options'"
     pp ok
 
     # Try to get the access token
@@ -437,7 +446,7 @@ exit 100
   fi
 
 # End of script
-  (( 1-$FOUND )) || (( $DELBRK )) || (( $DELRES )) || (( $DELORP )) || \
+  (( 1-$FOUND )) || (( $DEL_BROKEN_API )) || (( $DEL_STUCK )) || (( $DEL_ORPHAN )) || \
   pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
