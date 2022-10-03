@@ -10,9 +10,6 @@
 #
 # ----------------------------------------------------------------------------
 
-# Ensure variable declaration
-  set -u
-
 # Welcome message
   echo -e '\nKubernetes Namespace killer [knsk]'
 
@@ -116,7 +113,9 @@
   ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
 
 # Display help
+  set +u
   [[ $1 == '--help' || $1 == '-h' ]] && help
+  set -u
 
 # Check for parameters
   [[ $# -gt 0 ]] && section 'Check parameters' 
