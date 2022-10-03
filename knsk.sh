@@ -238,12 +238,22 @@
   if [[ $CHECK == "" ]]; then
     ok "Stuck namespaces not found"
   else
+    # Show short list
+    for NS in $CHECK; do warn "Stuck: $NS"; done
+    # Find resources related
     for NS in $CHECK; do
-      warn "Stuck: $NS"
-      CMD="$KUBECTL delete ns $NS"
-      pad "to fix: $CMD"
-      [[ $DEL_STUCK=="true" && $DRY_RUN=="false" ]] && fix $CMD
-    done  
+      section "Processing namespace $NS"
+      # Get all resources availabe on the cluster
+      AUX_CMD="$KUBECTL api-resources --verbs=list --namespaced -o name | xargs | sed s/\ /\,/g)"
+      # Get resources related to the stuck namepsace avoiding warns messages
+      RES_CMD="$KUBECTL -n $NS get --show-kind --no-headers $($AUX_CMD) 2>/dev/null"
+      # Save the list on a variable
+      RESOURCES=$($RES_CMD | awk '{print $1}')
+      if [[ $RESOURCES != "" ]]; then
+        # TODO: continue from here
+      fi
+
+
   fi
 
   exit 100
