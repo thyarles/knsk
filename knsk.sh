@@ -39,22 +39,22 @@ function help () {
 # Format output messages
 function section () {
   local MSG=$1
-  echo -e "\n### $MSG\n"
+  echo -e "\n #### $MSG\n"
 }
 
 function ok () {
   local MSG=$1
-  echo -e "[✓] $MSG"
+  echo -e " [✓]  $MSG"
 }
 
 function warn () {
   local MSG=$1
-  echo -e "[!] $MSG"
+  echo -e " [!]  $MSG"
 }
 
 function pad () {
   local MSG=$1
-  echo -e " -  $MSG"
+  echo -e "  -   $MSG"
 }
 
 function err () {
@@ -62,7 +62,7 @@ function err () {
   local FIX=$2
   local ERR=$3
   section "Error"
-  echo -e "[✗] $MSG"
+  echo -e " [✗]  $MSG"
   pad "try this: $FIX\n"
   exit $ERR
 }
@@ -132,7 +132,7 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         set +u
         if [[ -z $CI ]]; then
           pad "are you sure about it?"
-          pad "press any key to continue..."
+          pad "Press ENTER to continue, CTRL+C to cancel"
           read
         fi
         set -u
