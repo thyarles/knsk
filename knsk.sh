@@ -175,22 +175,22 @@
       ;;
       --port)
         shift
-        isNumber $1
         ok "Set kubectl proxy port = $1"
+        isNumber $1
         PROXY_PORT=$1
         shift
       ;;
       --timeout)
         shift
-        isNumber $1
         ok "Set timeout to $1 seconds"
+        isNumber $1
         TIME=$1
         shift
       ;;
       --kubeconfig)
         shift
-        fileExists $1
         ok "Set kubeconfig to $1"
+        fileExists $1
         KUBECTL="$KUBECTL --kubeconfig $1"
         shift
       ;;
