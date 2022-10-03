@@ -11,7 +11,8 @@
 # ----------------------------------------------------------------------------
 
 # Welcome message
-  echo -e '\nKubernetes Namespace killer [knsk]'
+  LOG="knsk-$(date +%s).log"
+  echo -e '\nKubernetes Namespace killer [knsk]' | tee $LOG
 
 # Help
   function help () {
@@ -36,31 +37,38 @@
 # Format output messages
   function section () {
     local MSG=$1
-    echo -e "\n::: $MSG\n"
+    echo -e "\n::: $MSG\n" | tee -a $LOG
   }
 
   function ok () {
     local MSG=$1
-    echo -e "[✓] $MSG"
+    echo -e "[✓] $MSG"  | tee -a $LOG
   }
 
   function warn () {
     local MSG=$1
-    echo -e "[!] $MSG"
+    echo -e "[!] $MSG"  | tee -a $LOG
   }
 
   function pad () {
     local MSG=$1
-    echo -e " -  $MSG"
+    echo -e " -  $MSG"  | tee -a $LOG
+  }
+
+  function fix () {
+    local CMD=$1
+    echo -ne " -  fixing... "  | tee -a $LOG
+    timeout $TIMEOUT $CMD %>> $LOG ; E=$?
+    checkSuccess $E
   }
 
   function err () {
     local MSG=$1
     local FIX=$2
     local ERR=$3
-    section "Error"
-    echo -e "[✗] $MSG"
-    pad "try this: $FIX\n"
+    section "Error"  | tee -a $LOG
+    echo -e "[✗] $MSG"  | tee -a $LOG
+    pad "try this: $FIX\n"  | tee -a $LOG
     exit $ERR
   }
 
@@ -82,8 +90,8 @@
 
   function checkSuccess () {
     local STATUS=$1
-    [[ $STATUS -eq 0 ]] && ok "Previous command succedded"
-    [[ $STATUS -ne 0 ]] && warn "Previous command failed"
+    [[ $STATUS -eq 0 ]] && echo "✓ success"
+    [[ $STATUS -ne 0 ]] && echo "✗ failed [check the $LOG]"
   }
 
   function checkVersion () {
@@ -219,11 +227,7 @@
       warn "Broken: $API"
       CMD="$KUBECTL delete apiservice $API"
       pad "to fix: $CMD"
-      if [[ $DEL_BROKEN_API=='true' && $DRY_RUN=='false' ]]; then
-        warn "Running command to fix"
-        timeout $TIMEOUT $CMD; E=$?
-        checkSuccess $E
-      fi
+      [[ $DEL_BROKEN_API=='true' && $DRY_RUN=='false' ]] && fix $CMD
     done  
   fi
 
