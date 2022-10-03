@@ -80,6 +80,12 @@
     [[ -x $FILE ]] || err "$FILE not executable" "fix: chmod +x $FILE" 1
   }
 
+  function checkSuccess () {
+    local STATUS=$1
+    [[ $STATUS -eq 0 ]] && ok "Previous command succedded"
+    [[ $STATUS -ne 0 ]] && warn "Previous command failed"
+  }
+
   function checkVersion () {
     local KUBECTL_VERSION="$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")"
     [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
@@ -147,29 +153,29 @@
       ;;
       --delete-broken)
         ok "Set delete broken API"
-        DEL_BROKEN_API=1
+        DEL_BROKEN_API=true
         shift
       ;;
       --delete-stuck)
         ok "Set delete stuck reources"
-        DEL_STUCK=1
+        DEL_STUCK=true
         shift
       ;;
       --delete-orphan)
         ok "Set delete orphan reources"
-        DEL_ORPHAN=1
+        DEL_ORPHAN=true
         shift
       ;;
       --delete-all)
         ok "Set delete broken API, stuck, and orphan reources"
-        DEL_BROKEN_API=1
-        DEL_STUCK=1
-        DEL_ORPHAN=1
+        DEL_BROKEN_API=true
+        DEL_STUCK=true
+        DEL_ORPHAN=true
         shift
       ;;
       --force)
         ok "Set force = true"
-        FORCE=1
+        FORCE=true
         shift
       ;;
       --port)
@@ -213,7 +219,11 @@
       warn "Broken: $API"
       CMD="$KUBECTL delete apiservice $API"
       pad "to fix: $CMD"
-      # TODO: not-dry-run
+      if [[ $DEL_BROKEN_API=='true' && $DRY_RUN=='false' ]]; then
+        warn "Running command to fix"
+        timeout $TIMEOUT $CMD; E=$?
+        checkSuccess $E
+      fi
     done  
   fi
 
