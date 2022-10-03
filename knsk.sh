@@ -205,14 +205,14 @@
 
 # Check for broken APIs [https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920]
   section "Check broken APIs"
-  CHECK=$($KUBECTL get apiservice --show-kind | grep True | awk '{print $1}')
+  CHECK=$($KUBECTL get apiservice --show-kind | grep False | awk '{print $1}')
   if [[ $CHECK == "" ]]; then
     ok "No broken API found"
   else
     for API in $CHECK; do
       warn "Broken: $API"
       CMD="$KUBECTL delete apiservice $API"
-      pad "to fix, call: $CMD"
+      pad "to fix: $CMD"
       # TODO: not-dry-run
     done  
   fi
