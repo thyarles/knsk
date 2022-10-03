@@ -204,18 +204,25 @@
   section "Check Kubernetes cluster"
   checkKubectl
 
-  exit 100
+# Check for broken APIs [https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920]
+  section "Check broken APIs"
+  CHECK=$($KUBECTL get apiservice --show-kind | grep True | awk '{print $1}')
+  if [[ CHECK == '']]; then
+    ok "No broken API found"
+  else
+    for API in $CHECK; do
+      warn "Broken: $API"
+      CMD="timeout $TIMEOUT $KUBECTL delete apiservice $API"
+      pad "$CMD"
+      # TODO: not-dry-run
+    done  
+  fi
 
-  pp t1 "Kubernetes NameSpace Killer"
-  pp t2n "Checking if kubectl is configured"
-  $K cluster-info >& /dev/null; E=$?
-  [ $E -gt 0 ] && pp fail "Check if the kubectl is installed and configured"
-  pp ok
+  exit 100
 
 # Check for broken APIs
   pp t2n "Checking for unavailable apiservices"
   APIS=$($K get apiservice | grep False | cut -f1 -d ' ')
-  # More info in https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920
   if [ "x$APIS" == "x" ]; then
     pp nfound  # Nothing found, go on
   else
