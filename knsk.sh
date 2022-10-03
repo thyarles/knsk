@@ -195,7 +195,8 @@
         shift
       ;;
       *)
-        err $1 "$(basename $0) --help" 2
+        warn $1
+        err "Invalid parameter" "$(basename $0) --help" 2
     esac
   done
 
