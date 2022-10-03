@@ -211,8 +211,8 @@
   else
     for API in $CHECK; do
       warn "Broken: $API"
-      CMD="timeout $TIMEOUT $KUBECTL delete apiservice $API"
-      pad "$CMD"
+      CMD="$KUBECTL delete apiservice $API"
+      pad "to fix, call: $CMD"
       # TODO: not-dry-run
     done  
   fi
