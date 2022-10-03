@@ -11,109 +11,112 @@
 # ----------------------------------------------------------------------------
 
 # Ensure variable declaration
-set -u
+  set -u
 
 # Welcome message
-echo -e '\nKubernetes Namespace killer [knsk]'
+  echo -e '\nKubernetes Namespace killer [knsk]'
 
 # Help
-function help () {
-  echo -e "
-  $(basename $0) [options]
+  function help () {
+    echo -e "
+    $(basename $0) [options]
 
-  --kubectl {bin}     Where is the kubectl [default to whereis kubectl]
-  --not-dry-run       Execute the commands for real (take care with it)
-  --skip-tls          --insecure-skip-tls-verify on kubectl call
-  --delete-broken-api Delete broken API found in your Kubernetes cluster
-  --delete-stuck      Delete stuck resources found in your stuck namespaces
-  --delete-orphan     Delete orphan resources found in your cluster
-  --delete-all        Delete resources of stuck namespaces and broken API
-  --force             Force deletion of stuck namespaces even if a clean deletion fail
-  --port {number}     Up kubectl proxy on this port, default is 8765
-  --timeout {number}  Max time (in seconds) to wait for Kubectl commands (default = 15)
-  --no-color          All output without colors (useful for scripts)
-  --kubeconfig {path} The path to a custom kubeconfig.yaml file (useful for scripts)\n"
-  exit 1
-}
+    --kubectl {bin}     Where is the kubectl [default to whereis kubectl]
+    --not-dry-run       Execute the commands for real (take care with it)
+    --skip-tls          --insecure-skip-tls-verify on kubectl call
+    --delete-broken-api Delete broken API found in your Kubernetes cluster
+    --delete-stuck      Delete stuck resources found in your stuck namespaces
+    --delete-orphan     Delete orphan resources found in your cluster
+    --delete-all        Delete resources of stuck namespaces and broken API
+    --force             Force deletion of stuck namespaces even if a clean deletion fail
+    --port {number}     Up kubectl proxy on this port, default is 8765
+    --timeout {number}  Max time (in seconds) to wait for Kubectl commands (default = 15)
+    --no-color          All output without colors (useful for scripts)
+    --kubeconfig {path} The path to a custom kubeconfig.yaml file (useful for scripts)\n"
+    exit 1
+  }
 
 # Format output messages
-function section () {
-  local MSG=$1
-  echo -e "\n::: $MSG\n"
-}
+  function section () {
+    local MSG=$1
+    echo -e "\n::: $MSG\n"
+  }
 
-function ok () {
-  local MSG=$1
-  echo -e "[✓] $MSG"
-}
+  function ok () {
+    local MSG=$1
+    echo -e "[✓] $MSG"
+  }
 
-function warn () {
-  local MSG=$1
-  echo -e "[!] $MSG"
-}
+  function warn () {
+    local MSG=$1
+    echo -e "[!] $MSG"
+  }
 
-function pad () {
-  local MSG=$1
-  echo -e " -  $MSG"
-}
+  function pad () {
+    local MSG=$1
+    echo -e " -  $MSG"
+  }
 
-function err () {
-  local MSG=$1
-  local FIX=$2
-  local ERR=$3
-  section "Error"
-  echo -e "[✗] $MSG"
-  pad "try this: $FIX\n"
-  exit $ERR
-}
+  function err () {
+    local MSG=$1
+    local FIX=$2
+    local ERR=$3
+    section "Error"
+    echo -e "[✗] $MSG"
+    pad "try this: $FIX\n"
+    exit $ERR
+  }
 
 # Util functions
-function isNumber () {
-  local NUMBER=$1
-   [ "$NUMBER" -eq "$NUMBER" ] 2>/dev/null || err "$NUMBER must be a number" "$(basename $0) --help" 1
-}
+  function isNumber () {
+    local NUMBER=$1
+    [ "$NUMBER" -eq "$NUMBER" ] 2>/dev/null || err "$NUMBER must be a number" "$(basename $0) --help" 1
+  }
 
-function fileExists () {
-  local FILE=$1
-  [[ -f $FILE ]] || err "$FILE not found" "Check if the file exists" 1
-}
+  function fileExists () {
+    local FILE=$1
+    [[ -f $FILE ]] || err "$FILE not found" "Check if the file exists" 1
+  }
 
-function isExecutable () {
-  local FILE=$1
-  [[ -x $FILE ]] || err "$FILE not executable" "fix: chmod +x $FILE" 1
-}
+  function isExecutable () {
+    local FILE=$1
+    [[ -x $FILE ]] || err "$FILE not executable" "fix: chmod +x $FILE" 1
+  }
 
-function checkVersion () {
-  local KUBECTL_VERSION="$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")"
-  [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
-  pad "$KUBECTL_VERSION"
-}
+  function checkVersion () {
+    local KUBECTL_VERSION="$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")"
+    [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
+    pad "$KUBECTL_VERSION"
+  }
 
-function checkCluster () {
-  local CLUSTER_INFO="$($KUBECTL cluster-info | head -1)"
-  [[ -n $CLUSTER_INFO ]] || err "The cluster is not reachable" 1
-  pad "$CLUSTER_INFO"
-}
+  function checkCluster () {
+    local CLUSTER_INFO="$($KUBECTL cluster-info | head -1)"
+    [[ -n $CLUSTER_INFO ]] || err "The cluster is not reachable" 1
+    pad "$CLUSTER_INFO"
+  }
 
-function checkKubectl () {
-  [[ -z $KUBECTL ]] && err "kubectl not found" "$(basename $0) --kubectl /path/kubectl" 1
-  fileExists $KUBECTL
-  isExecutable $KUBECTL
-  pad "kubectl to be used $KUBECTL"
-  checkVersion
-  checkCluster
-}
+  function checkKubectl () {
+    [[ -z $KUBECTL ]] && err "kubectl not found" "$(basename $0) --kubectl /path/kubectl" 1
+    fileExists $KUBECTL
+    isExecutable $KUBECTL
+    pad "kubectl to be used $KUBECTL"
+    checkVersion
+    checkCluster
+  }
 
 # Set default setup
-KUBECTL=$(which kubectl)    # Define kubectl location
-DEL_BROKEN_API=false        # Don't delete broken API
-DEL_STUCK=false             # Don't delete inside resources
-DEL_ORPHAN=false            # Don't delete orphan resources
-DRY_RUN=true                # Show the commands to be executed instead of run it
-FORCE=false                 # Don't force deletion with kubeclt proxy by default
-PROXY_PORT=8765             # Port to up kubectl proxy
-TIMEOUT=15                  # Timeout to wait for kubectl command responses
-ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
+  KUBECTL=$(which kubectl)    # Define kubectl location
+  DEL_BROKEN_API=false        # Don't delete broken API
+  DEL_STUCK=false             # Don't delete inside resources
+  DEL_ORPHAN=false            # Don't delete orphan resources
+  DRY_RUN=true                # Show the commands to be executed instead of run it
+  FORCE=false                 # Don't force deletion with kubeclt proxy by default
+  PROXY_PORT=8765             # Port to up kubectl proxy
+  TIMEOUT=15                  # Timeout to wait for kubectl command responses
+  ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
+
+# Display help
+  [[ $1 == '--help' || $1 == '-h' ]] && help
 
 # Check for parameters
   [[ $# -gt 0 ]] && section 'Check parameters' 
@@ -190,9 +193,6 @@ ETCD_WAIT=60                # Time to wait Kubernetes do clean deletion
         ok "Set kubeconfig to $1"
         KUBECTL="$KUBECTL --kubeconfig $1"
         shift
-      ;;
-      --help)
-        help
       ;;
       *)
         err $1 "$(basename $0) --help" 2
