@@ -14,7 +14,7 @@
 set -u
 
 # Welcome message
-echo -e '\n::: knsk - Kubernetes Namespace killer'
+echo -e '\nKubernetes Namespace killer [knsk]'
 
 # Help
 function help () {
