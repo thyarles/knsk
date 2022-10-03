@@ -219,47 +219,35 @@
 
 # Check for broken APIs [https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920]
   section "Check broken APIs"
-  CHECK=$($KUBECTL get apiservice --show-kind | grep False | awk '{print $1}')
+  CHECK=$($KUBECTL get --show-kind apiservice | grep False | awk '{print $1}')
   if [[ $CHECK == "" ]]; then
-    ok "No broken API found"
+    ok "Broken APIs not found"
   else
     for API in $CHECK; do
       warn "Broken: $API"
       CMD="$KUBECTL delete apiservice $API"
       pad "to fix: $CMD"
-      [[ $DEL_BROKEN_API=='true' && $DRY_RUN=='false' ]] && fix $CMD
+      [[ $DEL_BROKEN_API=="true" && $DRY_RUN=="false" ]] && fix $CMD
+    done  
+  fi
+
+
+# Check for stuck namespaces
+  section "Check stuck namespaces"
+  CHECK=$($KUBECTL get --show-kind ns | grep Terminating | awk '{print $1}')
+  if [[ $CHECK == "" ]]; then
+    ok "Stuck namespaces not found"
+  else
+    for NS in $CHECK; do
+      warn "Stuck: $NS"
+      CMD="$KUBECTL delete ns $NS"
+      pad "to fix: $CMD"
+      [[ $DEL_STUCK=="true" && $DRY_RUN=="false" ]] && fix $CMD
     done  
   fi
 
   exit 100
 
-# Check for broken APIs
-  pp t2n "Checking for unavailable apiservices"
-  APIS=$($K get apiservice | grep False | cut -f1 -d ' ')
-  if [ "x$APIS" == "x" ]; then
-    pp nfound  # Nothing found, go on
-  else
-    pp found   # Something found, let's deep in
-    for API in $APIS; do
-      pp t3n "Broken -> $R$API$S"
-      if (( $DEL_BROKEN_API )); then
-        CMD="timeout $TIME $K delete apiservice $API"
-        if (( $DRY_RUN )); then
-          pp dryrun
-          pp t3d "$CMD"
-        else
-          CLEAN=1
-          $CMD >& /dev/null; E=$?
-          if [ $E -gt 0 ]; then pp error; else pp del; fi
-        fi
-      else
-        pp skip
-      fi
-    done
-    [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes does a clean namespace deletion"
-  fi
-
-# Search for resources in stuck namespaces
   pp t2n "Checking for stuck namespaces"
   NSS=$($K get ns 2>/dev/null | grep Terminating | cut -f1 -d ' ')
   if [ "x$NSS" == "x" ]; then
