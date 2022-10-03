@@ -206,7 +206,7 @@
 # Check for broken APIs [https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920]
   section "Check broken APIs"
   CHECK=$($KUBECTL get apiservice --show-kind | grep True | awk '{print $1}')
-  if [[ CHECK == '']]; then
+  if [[ $CHECK == "" ]]; then
     ok "No broken API found"
   else
     for API in $CHECK; do
