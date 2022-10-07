@@ -22,7 +22,7 @@
     --kubectl {bin}     Where is the kubectl [default to whereis kubectl]
     --not-dry-run       Execute the commands for real (take care with it)
     --skip-tls          --insecure-skip-tls-verify on kubectl call
-    --delete-broken-api Delete broken API found in your Kubernetes cluster
+    --delete-broken     Delete broken API found in your Kubernetes cluster
     --delete-stuck      Delete stuck resources found in your stuck namespaces
     --delete-orphan     Delete orphan resources found in your cluster
     --delete-all        Delete resources of stuck namespaces and broken API
@@ -42,22 +42,22 @@
 
   function ok () {
     local MSG=$1
-    echo -e "[✓] $MSG"  | tee -a $LOG
+    echo -e "    [✓] $MSG"  | tee -a $LOG
   }
 
   function warn () {
     local MSG=$1
-    echo -e "[!] $MSG"  | tee -a $LOG
+    echo -e "    [!] $MSG"  | tee -a $LOG
   }
 
   function pad () {
     local MSG=$1
-    echo -e " -  $MSG"  | tee -a $LOG
+    echo -e "     -  $MSG"  | tee -a $LOG
   }
 
   function fix () {
     local CMD=$1
-    echo -ne " -  fixing... "  | tee -a $LOG
+    echo -ne "     -  fixing... "  | tee -a $LOG
     timeout $TIMEOUT $CMD %>> $LOG ; E=$?
     checkSuccess $E
   }
@@ -67,7 +67,7 @@
     local FIX=$2
     local ERR=$3
     section "Error"  | tee -a $LOG
-    echo -e "[✗] $MSG"  | tee -a $LOG
+    echo -e "    [✗] $MSG"  | tee -a $LOG
     pad "try this: $FIX\n"  | tee -a $LOG
     exit $ERR
   }
@@ -97,20 +97,20 @@
   function checkVersion () {
     local KUBECTL_VERSION="$($KUBECTL version --client --short | grep -E -e "v1.19" -e "v1.2")"
     [[ -n $KUBECTL_VERSION ]] || err "kubectl must be v1.19+" "fix: upgrade your kubectl" 1
-    pad "$KUBECTL_VERSION"
+    ok "$KUBECTL_VERSION"
   }
 
   function checkCluster () {
-    local CLUSTER_INFO="$($KUBECTL cluster-info | head -1)"
+    local CLUSTER_INFO="$(TERM=dumb $KUBECTL cluster-info | head -1)"
     [[ -n $CLUSTER_INFO ]] || err "The cluster is not reachable" 1
-    pad "$CLUSTER_INFO"
+    ok "$CLUSTER_INFO"
   }
 
   function checkKubectl () {
     [[ -z $KUBECTL ]] && err "kubectl not found" "$(basename $0) --kubectl /path/kubectl" 1
     fileExists $KUBECTL
     isExecutable $KUBECTL
-    pad "kubectl to be used $KUBECTL"
+    ok "kubectl to be used $KUBECTL"
     checkVersion
     checkCluster
   }
@@ -120,7 +120,7 @@
   DEL_BROKEN_API=false        # Don't delete broken API
   DEL_STUCK=false             # Don't delete inside resources
   DEL_ORPHAN=false            # Don't delete orphan resources
-  DRY_RUN=true                # Show the commands to be executed instead of run it
+  NOT_DRY_RUN=false           # Show the commands to be executed instead of run it
   FORCE=false                 # Don't force deletion with kubeclt proxy by default
   PROXY_PORT=8765             # Port to up kubectl proxy
   TIMEOUT=15                  # Timeout to wait for kubectl command responses
@@ -142,7 +142,7 @@
         shift
       ;;
       --not-dry-run)
-        DRY_RUN=false
+        NOT_DRY_RUN=true
         ok "Set not dry run"
         # If CI env, avoid confirmation
         set +u
@@ -219,42 +219,41 @@
 
 # Check for broken APIs [https://github.com/kubernetes/kubernetes/issues/60807#issuecomment-524772920]
   section "Check broken APIs"
-  CHECK=$($KUBECTL get --show-kind apiservice | grep False | awk '{print $1}')
-  if [[ $CHECK == "" ]]; then
+  CHECK=$($KUBECTL get --show-kind apiservice | grep True | awk '{print $1}')
+  if [[ -z $CHECK ]]; then
     ok "Broken APIs not found"
   else
     for API in $CHECK; do
       warn "Broken: $API"
       CMD="$KUBECTL delete apiservice $API"
       pad "to fix: $CMD"
-      [[ $DEL_BROKEN_API=="true" && $DRY_RUN=="false" ]] && fix $CMD
+      if $DEL_BROKEN_API && $NOT_DRY_RUN; then fix $CMD; fi
     done  
   fi
-
 
 # Check for stuck namespaces
   section "Check stuck namespaces"
   CHECK=$($KUBECTL get --show-kind ns | grep Terminating | awk '{print $1}')
-  if [[ $CHECK == "" ]]; then
+  if [[ -z $CHECK ]]; then
     ok "Stuck namespaces not found"
   else
     # Show short list
     for NS in $CHECK; do warn "Stuck: $NS"; done
     # Find resources related
-    for NS in $CHECK; do
-      section "Processing namespace $NS"
-      # Get all resources availabe on the cluster
-      AUX_CMD="$KUBECTL api-resources --verbs=list --namespaced -o name | xargs | sed s/\ /\,/g)"
-      # Get resources related to the stuck namepsace avoiding warns messages
-      RES_CMD="$KUBECTL -n $NS get --show-kind --no-headers $($AUX_CMD) 2>/dev/null"
-      # Save the list on a variable
-      RESOURCES=$($RES_CMD | awk '{print $1}')
-      if [[ $RESOURCES != "" ]]; then
-        # TODO: continue from here
-      fi
-
-
+    # for NS in $CHECK; do
+    #   section "Processing namespace $NS"
+    #   # Get all resources availabe on the cluster
+    #   AUX_CMD="$KUBECTL api-resources --verbs=list --namespaced -o name | xargs | sed s/\ /\,/g)"
+    #   # Get resources related to the stuck namepsace avoiding warns messages
+    #   RES_CMD="$KUBECTL -n $NS get --show-kind --no-headers $($AUX_CMD) 2>/dev/null"
+    #   # Save the list on a variable
+    #   RESOURCES=$($RES_CMD | awk '{print $1}')
+    #   if [[ $RESOURCES != "" ]]; then
+    #     # TODO: continue from here
+    #   fi
   fi
+
+  section "Done in $SECONDS seconds"
 
   exit 100
 
