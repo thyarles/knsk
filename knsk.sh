@@ -10,8 +10,10 @@
 #
 # ----------------------------------------------------------------------------
 
-# Welcome message
+# Log file
   LOG="knsk-$(date +%s).log"
+  
+# Welcome message
   echo -e '\nKubernetes Namespace killer [knsk]' | tee $LOG
 
 # Help
