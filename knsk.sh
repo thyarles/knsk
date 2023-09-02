@@ -2,7 +2,7 @@
 
 # ----------------------------------------------------------------------------
 #
-# knsk.sh
+# knsk.sh (V2)
 #
 # This script delete Kubernetes' namespaces that stuck in Terminanting status
 #
