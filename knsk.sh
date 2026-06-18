@@ -13,14 +13,12 @@
 # Variables
   set -u       # Ensure declaration of variables before use it
   K='kubectl'  # Short for kubectl
-               # TODO: Check version of kubectl and work only for 1.16 and upper
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
   DELORP=0     # Don't delete orphan resources by default
-               # TODO: Change the way to check ofr orphan resources
+  DELWHK=0     # Don't delete broken webhooks by default
   DRYRUN=0     # Show the commands to be executed and don't run them
-  FORCE=0      # Don't force deletion with kubeclt proxy by default
-               # TODO: If in k8s 1.17 or upper, try go get the reason of delayed ns deletion
+  FORCE=0      # Don't force deletion of stuck namespaces by default
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
@@ -44,7 +42,8 @@
     echo -e "  --delete-api\t\tDelete broken API found in your Kubernetes cluster"
     echo -e "  --delete-resource\tDelete stuck resources found in your stuck namespaces"
     echo -e "  --delete-orphan\tDelete orphan resources found in your cluster"
-    echo -e "  --delete-all\t\tDelete resources of stuck namespaces and broken API"
+    echo -e "  --delete-webhook\tDelete broken admission webhooks blocking namespace deletion"
+    echo -e "  --delete-all\t\tDelete resources of stuck namespaces, broken API and broken webhooks"
     echo -e "  --force\t\tForce deletion of stuck namespaces even if a clean deletion fail"
     echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
     echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
@@ -77,10 +76,15 @@
         DELORP=1
         shift
       ;;
+      --delete-webhook)
+        DELWHK=1
+        shift
+      ;;
       --delete-all)
         DELBRK=1
         DELRES=1
         DELORP=1
+        DELWHK=1
         shift
       ;;
       --force)
@@ -155,12 +159,25 @@
     set -u; IFS="$OLD_IFS"; export CLEAN=0
   }
 
-# Check if kubectl is available
+# Check if kubectl is available and get its version
   pp t1 "Kubernetes NameSpace Killer"
   pp t2n "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
   [ $E -gt 0 ] && pp fail "Check if the kubectl is installed and configured"
   pp ok
+
+# Check kubectl client version (minimum 1.20 recommended)
+  pp t2n "Checking kubectl version"
+  KVER=$($K version --client 2>/dev/null | grep -o '[Vv][0-9][0-9]*\.[0-9][0-9]*' | head -1 | tr -d 'Vv')
+  KMAJ=$(echo "$KVER" | cut -d. -f1)
+  KMIN=$(echo "$KVER" | cut -d. -f2 | tr -d '+')
+  if [ -z "$KVER" ]; then
+    echo -e " ${Y}(unable to detect version)${S}"
+  elif [ "${KMAJ:-0}" -lt 1 ] || ( [ "${KMAJ:-0}" -eq 1 ] && [ "${KMIN:-0}" -lt 20 ] ); then
+    echo -e " ${R}($KVER — upgrade to 1.20+ recommended)${S}"
+  else
+    echo -e " ${G}($KVER)${S}"
+  fi
 
 # Check for broken APIs
   pp t2n "Checking for unavailable apiservices"
@@ -188,6 +205,51 @@
     done
     [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes does a clean namespace deletion"
   fi
+
+# Check for broken admission webhooks (a leading cause of stuck namespaces in k8s 1.20+)
+  pp t2n "Checking for broken admission webhooks"
+  WHKS=$( { $K get validatingwebhookconfigurations -o custom-columns='NAME:.metadata.name,NS:.webhooks[*].clientConfig.service.namespace,SVC:.webhooks[*].clientConfig.service.name,FAIL:.webhooks[*].failurePolicy' --no-headers 2>/dev/null; \
+             $K get mutatingwebhookconfigurations   -o custom-columns='NAME:.metadata.name,NS:.webhooks[*].clientConfig.service.namespace,SVC:.webhooks[*].clientConfig.service.name,FAIL:.webhooks[*].failurePolicy' --no-headers 2>/dev/null; } )
+  OLD_IFS=$IFS; IFS=$'\n'; WHK_BROKEN=0
+  while IFS= read -r WHK_LINE; do
+    [ -z "$WHK_LINE" ] && continue
+    WHK_NAME=$(echo "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f1)
+    WHK_NS=$(echo   "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f2)
+    WHK_SVC=$(echo  "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f3)
+    WHK_FAIL=$(echo "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f4)
+    # Skip webhooks that use a URL instead of a service reference
+    [ "$WHK_SVC" = "<none>" ] && continue
+    [ -z "$WHK_SVC" ] && continue
+    # Check if the backend service exists
+    $K get service "$WHK_SVC" -n "$WHK_NS" >& /dev/null; E=$?
+    if [ $E -gt 0 ]; then
+      WHK_BROKEN=1
+      FOUND=1
+      if [ "$WHK_FAIL" = "Fail" ]; then
+        pp t3 "Broken (failurePolicy=Fail) -> $R$WHK_NAME$S$Y (svc: $R$WHK_NS/$WHK_SVC$S$Y — $R$Y blocks deletions$S$Y)"
+      else
+        pp t3 "Broken -> $R$WHK_NAME$S$Y (svc: $R$WHK_NS/$WHK_SVC$S$Y not found)"
+      fi
+      if (( $DELWHK )); then
+        # Detect whether it is validating or mutating
+        $K get validatingwebhookconfiguration "$WHK_NAME" >& /dev/null && WHK_TYPE="validatingwebhookconfiguration" || WHK_TYPE="mutatingwebhookconfiguration"
+        CMD="timeout $TIME $K delete $WHK_TYPE $WHK_NAME"
+        if (( $DRYRUN )); then
+          pp dryrun
+          pp t3d "$CMD"
+        else
+          CLEAN=1
+          $CMD >& /dev/null; E=$?
+          if [ $E -gt 0 ]; then pp error; else pp del; fi
+        fi
+      else
+        pp skip
+      fi
+    fi
+  done <<< "$WHKS"
+  (( $WHK_BROKEN )) || echo -e "${G} not found${S}"
+  IFS=$OLD_IFS
+  [ $CLEAN -gt 0 ] && timer $WAIT "broken webhooks deleted, waiting to see if Kubernetes does a clean namespace deletion"
 
 # Search for resources in stuck namespaces
   pp t2n "Checking for stuck namespaces"
@@ -326,24 +388,14 @@
 
     pp t2 "Forcing deletion of stuck namespaces"
 
-    # Check if --force is used without --delete-resouce
+    # Check if --force is used without --delete-resource
     pp t3n "Checking compliance of --force option"
-    (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource options'"
+    (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource' options"
     pp ok
 
-    # Try to get the access token
-    pp t3n "Getting the access token to force deletion"
-    TOKEN=$($K -n default describe secret \
-          $($K -n default get secrets | grep default | cut -f1 -d ' ') | \
-          grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' '); E=$?
-    [ $E -gt 0 ] && pp fail "Unable to get the token to force a deletion"
-    pp ok
-
-    # Try to up the kubectl proxy
-    pp t3n "Starting kubectl proxy"
-    $K proxy --accept-hosts='^localhost$,^127\.0\.0\.1$,^\[::1\]$' -p $KPORT  >> /tmp/proxy.out 2>&1 &
-    E=$?; KPID=$!
-    [ $E -gt 0 ] && pp fail "Unable start a proxy, check if the port '$KPORT' is free. Change it by passing '--port number' flag"
+    # Check for python3 (needed for JSON manipulation)
+    pp t3n "Checking for python3"
+    python3 --version >& /dev/null || pp fail "python3 is required for --force but was not found"
     pp ok
 
     # Force namespace deletion
@@ -355,30 +407,50 @@
       pp found
       for NS in $NSS; do
         pp t4n "Forcing deletion of $NS"
-        TMP=/tmp/$NS.json
-        $K get ns $NS -o json > $TMP 2>/dev/null
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-          sed -i '' "s/\"kubernetes\"//g" $TMP
-        else
-          sed -i s/\"kubernetes\"//g $TMP
-        fi
-        CMD="curl -s -o $TMP.log -X PUT --data-binary @$TMP http://localhost:$KPORT/api/v1/namespaces/$NS/finalize \
-                  -H \"Content-Type: application/json\" --header \"Authorization: Bearer $TOKEN\" --insecure"
+        TMP=$(mktemp /tmp/knsk-XXXXXX.json)
+        CMD="$K replace --raw /api/v1/namespaces/$NS/finalize -f $TMP"
         if (( $DRYRUN )); then
           pp dryrun
+          pp t4d "# Get namespace JSON, clear spec.finalizers, then:"
           pp t4d "$CMD"
         else
-          $CMD; sleep 5
-          pp ok
+          # Modern method: kubectl replace --raw (works on k8s 1.20+, no proxy or token needed)
+          $K get namespace "$NS" -o json 2>/dev/null | \
+            python3 -c "import sys,json; ns=json.load(sys.stdin); ns['spec']['finalizers']=[]; print(json.dumps(ns))" \
+            > "$TMP" 2>/dev/null
+          $CMD >& /dev/null; E=$?
+          if [ $E -gt 0 ]; then
+            # Fallback: kubectl proxy + curl (for clusters older than 1.20)
+            pp t4n "Modern method failed, trying legacy proxy method"
+            KPID=0
+            TOKEN=""
+            # Try modern token generation first (k8s 1.24+), then fall back to secret lookup
+            TOKEN=$($K create token default -n default 2>/dev/null) || \
+            TOKEN=$($K -n default get secrets -o jsonpath='{.items[?(@.type=="kubernetes.io/service-account-token")].data.token}' 2>/dev/null | \
+                    python3 -c "import sys,base64; d=sys.stdin.read().strip(); print(base64.b64decode(d).decode())" 2>/dev/null)
+            if [ -z "$TOKEN" ]; then
+              pp error
+              pp t4d "Could not obtain a token — namespace $NS may need manual cleanup"
+            else
+              $K proxy --accept-hosts='^localhost$,^127\.0\.0\.1$,^\[::1\]$' -p $KPORT >> /tmp/knsk-proxy.out 2>&1 &
+              KPID=$!; sleep 2
+              $K get ns "$NS" -o json 2>/dev/null | \
+                python3 -c "import sys,json; ns=json.load(sys.stdin); ns['spec']['finalizers']=[]; print(json.dumps(ns))" \
+                > "$TMP" 2>/dev/null
+              curl -s -X PUT --data-binary "@$TMP" \
+                "http://localhost:$KPORT/api/v1/namespaces/$NS/finalize" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $TOKEN" --insecure >& /dev/null; E=$?
+              kill $KPID 2>/dev/null; wait $KPID 2>/dev/null
+              if [ $E -gt 0 ]; then pp error; else pp ok; fi
+            fi
+          else
+            pp ok
+          fi
+          rm -f "$TMP"
         fi
       done
     fi
-
-    # Close the proxy
-    pp t3n "Stopping kubectl proxy"
-    kill $KPID; E=$?
-    wait $KPID 2>/dev/null
-    if [ $E -gt 0 ]; then pp error; else pp ok; fi
   fi
 
 # End of script
