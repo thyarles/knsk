@@ -17,13 +17,14 @@
   DELRES=0     # Don't delete inside resources by default
   DELORP=0     # Don't delete orphan resources by default
   DELWHK=0     # Don't delete broken webhooks by default
+  DELLOST=0    # Don't delete Lost PVCs by default
   DRYRUN=0     # Show the commands to be executed and don't run them
   FORCE=0      # Don't force deletion of stuck namespaces by default
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
   TIME=15      # Default timeout to wait for kubectl command responses
-  WAIT=60      # Default time to wait Kubernetes do clean deletion
+  WAIT=7       # Default time to wait Kubernetes do clean deletion
   C='\e[96m'   # Cyan
   M='\e[95m'   # Magenta
   B='\e[94m'   # Blue
@@ -43,7 +44,8 @@
     echo -e "  $Y--delete-resource$S\tDelete stuck resources found in your stuck namespaces"
     echo -e "  $Y--delete-orphan$S\tDelete orphan resources found in your cluster"
     echo -e "  $Y--delete-webhook$S\tDelete broken admission webhooks blocking namespace deletion"
-    echo -e "  $Y--delete-all$S\t\tDelete resources of stuck namespaces, broken API and broken webhooks"
+    echo -e "  $Y--delete-lost$S	Delete PersistentVolumeClaims stuck in Lost phase"
+    echo -e "  $Y--delete-all$S		Delete resources of stuck namespaces, broken API, broken webhooks and Lost PVCs"
     echo -e "  $Y--force$S\t\tForce deletion of stuck namespaces even if a clean deletion fails"
     echo -e "  $Y--port$S {number}\tUp kubectl proxy on this port $A(default: 8765)$S"
     echo -e "  $Y--timeout$S {number}\tMax time in seconds to wait for kubectl commands $A(default: 15)$S"
@@ -80,11 +82,16 @@
         DELWHK=1
         shift
       ;;
+      --delete-lost)
+        DELLOST=1
+        shift
+      ;;
       --delete-all)
         DELBRK=1
         DELRES=1
         DELORP=1
         DELWHK=1
+        DELLOST=1
         shift
       ;;
       --force)
@@ -134,8 +141,8 @@
               local _pad=$(( 54 - ${#_vis} )); [[ $_pad -lt 2 ]] && _pad=2
               local _dots; _dots=$(printf '%.0s.' $(seq 1 "$_pad"))
               echo -ne "$N  $Y:: $_t $A$_dots$S"                   ;;
-      t3    ) echo -e  "   $Y> ${2:-}$S"                           ;;
-      t3n   ) echo -ne "   $Y> ${2:-}$A...$S"                      ;;
+      t3    ) echo -e  "   $Y  ${2:-}$S"                           ;;
+      t3n   ) echo -ne "   $Y  ${2:-}$A...$S"                      ;;
       t3d   ) echo -e  "     $A${2:-}$S"                           ;;
       t4    ) echo -e  "      $Y> ${2:-}$S"                        ;;
       t4n   ) echo -ne "      $Y> ${2:-}$A...$S"                   ;;
@@ -389,6 +396,33 @@
   IFS=$OLD_IFS
   [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to Kubernetes sync"
 
+# Search for PersistentVolumeClaims stuck in Lost phase
+  pp t2n "Checking for Lost PersistentVolumeClaims"
+  OLD_IFS=$IFS; IFS=$'\n'; PRINTED=0
+  while IFS= read -r LINE; do
+    [ -z "$LINE" ] && continue
+    LOST_NS=$(echo  "$LINE" | tr -s ' ' | cut -d ' ' -f1)
+    LOST_PVC=$(echo "$LINE" | tr -s ' ' | cut -d ' ' -f2)
+    (( $PRINTED )) || pp found && PRINTED=1
+    pp t3n "$R$LOST_NS$S$Y/pvc/$R$LOST_PVC$S"
+    if (( $DELLOST )); then
+      CMD="timeout $TIME $K -n $LOST_NS delete pvc $LOST_PVC --grace-period=0 --force=true"
+      if (( $DRYRUN )); then
+        pp dryrun
+        pp t3d "$CMD"
+      else
+        CLEAN=1
+        $CMD >& /dev/null; E=$?
+        if [ $E -gt 0 ]; then pp error; else pp del; fi
+      fi
+    else
+      pp skip
+    fi
+  done < <($K get pvc -A --no-headers 2>/dev/null | awk '$3 == "Lost" {print $1, $2}')
+  (( $PRINTED )) || pp nfound
+  IFS=$OLD_IFS
+  [ $CLEAN -gt 0 ] && timer $WAIT "Lost PVCs deleted, waiting to Kubernetes sync"
+
 # Search for resisted stuck namespaces and force deletion if --force is passed
   if (( $FORCE )); then
 
@@ -412,13 +446,13 @@
     else
       pp found
       for NS in $NSS; do
-        pp t4n "Forcing deletion of $NS"
+        pp t3n "Forcing deletion of $NS"
         TMP=$(mktemp /tmp/knsk-XXXXXX.json)
         CMD="$K replace --raw /api/v1/namespaces/$NS/finalize -f $TMP"
         if (( $DRYRUN )); then
           pp dryrun
-          pp t4d "# Get namespace JSON, clear spec.finalizers, then:"
-          pp t4d "$CMD"
+          pp t3d "# Get namespace JSON, clear spec.finalizers, then:"
+          pp t3d "$CMD"
         else
           # Modern method: kubectl replace --raw (works on k8s 1.20+, no proxy or token needed)
           $K get namespace "$NS" -o json 2>/dev/null | \
@@ -427,7 +461,7 @@
           $CMD >& /dev/null; E=$?
           if [ $E -gt 0 ]; then
             # Fallback: kubectl proxy + curl (for clusters older than 1.20)
-            pp t4n "Modern method failed, trying legacy proxy method"
+            pp t3n "Modern method failed, trying legacy proxy method"
             KPID=0
             TOKEN=""
             # Try modern token generation first (k8s 1.24+), then fall back to secret lookup

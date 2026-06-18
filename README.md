@@ -2,7 +2,7 @@
 
 A battle-tested toolkit for dealing with **stuck namespaces** and backing up Kubernetes resources.
 
-- **`knsk.sh`** — diagnoses and kills namespaces stuck in `Terminating` state
+- **`knsk.sh`** — diagnoses and kills namespaces stuck in `Terminating` state, and cleans up other cluster-level problems
 - **`backup.sh`** — backs up any namespace to clean, `kubectl apply`-ready YAML files
 
 > Requires `kubectl` ≥ 1.20 and `python3`. `backup.sh` additionally requires [`yq` v4](https://github.com/mikefarah/yq/releases).
@@ -18,10 +18,11 @@ Running without flags performs a **read-only diagnosis** and reports:
 | Check | What it finds |
 |---|---|
 | Unavailable API services | Aggregated APIs that are down and blocking namespace cleanup |
-| **Broken admission webhooks** *(new)* | Validating/Mutating webhooks whose backend Service is missing — a leading cause of stuck namespaces in k8s 1.20+ |
+| Broken admission webhooks | Validating/Mutating webhooks whose backend Service is missing — a leading cause of stuck namespaces in k8s 1.20+ |
 | Stuck namespaces | Namespaces in `Terminating` state and the resources blocking them |
 | Stuck cluster resources | Resources in `Terminating` state across all namespaces |
 | Orphan resources | Resources that belong to a namespace that no longer exists |
+| **Lost PVCs** | PersistentVolumeClaims in `Lost` phase whose backing PV no longer exists — blocks pod scheduling indefinitely |
 
 ### Quick start
 
@@ -49,6 +50,7 @@ knsk.sh [options]
   --delete-resource       Delete stuck resources inside stuck namespaces
   --delete-orphan         Delete orphan resources found in the cluster
   --delete-webhook        Delete broken admission webhooks blocking namespace deletion
+  --delete-lost           Delete PersistentVolumeClaims stuck in Lost phase
   --delete-all            All of the above combined
   --force                 Force-finalize namespaces that survive --delete-all
   --port {number}         kubectl proxy port for legacy fallback (default: 8765)
@@ -87,7 +89,7 @@ chmod +x backup.sh
 ./backup.sh my-app --outdir /mnt/backups
 ./backup.sh my-app -o /mnt/backups
 
-# Restore
+# Restore — the Namespace object is always applied first, so this is all you need
 kubectl apply -f knsk_backup/20260618_17h00/my-app/
 ```
 
@@ -95,16 +97,19 @@ kubectl apply -f knsk_backup/20260618_17h00/my-app/
 
 ```
 knsk_backup/
-└── 20260618_17h00/          ← timestamp, never overwritten
+└── 20260618_17h00/              ← timestamp, never overwritten
     └── my-app/
-        ├── Deployment-api.yaml
-        ├── Service-api.yaml
+        ├── 00-Namespace-my-app.yaml      ← always first (sorts before A–Z)
         ├── ConfigMap-app-config.yaml
-        ├── Secret-app-secrets.yaml
+        ├── Deployment-api.yaml
         ├── PersistentVolumeClaim-data.yaml
-        ├── PersistentVolume-pvc-xxx.yaml   ← cluster-scoped, included when bound to this namespace
+        ├── PersistentVolume-pvc-xxx.yaml  ← cluster-scoped, included when bound to this namespace
+        ├── Secret-app-secrets.yaml
+        ├── Service-api.yaml
         └── ...
 ```
+
+The `00-Namespace-*.yaml` prefix guarantees the namespace is created before any namespaced resources when running `kubectl apply -f <dir>/`.
 
 ### What gets stripped
 
@@ -112,15 +117,26 @@ The following fields are removed from every exported resource so that `kubectl a
 
 `status` · `metadata.uid` · `metadata.resourceVersion` · `metadata.generation` · `metadata.creationTimestamp` · `metadata.deletionTimestamp` · `metadata.managedFields` · `metadata.ownerReferences` · `metadata.selfLink` · `metadata.annotations[kubectl.kubernetes.io/last-applied-configuration]`
 
+Two additional fields are stripped to avoid binding conflicts on restore:
+
+| Resource | Extra field stripped | Reason |
+|---|---|---|
+| `PersistentVolumeClaim` | `spec.volumeName` | Allows dynamic provisioning of a fresh PV instead of pointing to a non-existent one |
+| `PersistentVolume` | `spec.claimRef` | Returns the PV to `Available` state so it can be re-bound |
+
 ### What gets skipped
 
 Resources that are ephemeral or auto-reconstructed by Kubernetes are excluded:
 
-- **Kinds:** `Event`, `Endpoints`, `EndpointSlice`, `Pod`, `ReplicaSet`, `Lease`, `ControllerRevision`, `ReplicationController`
-- **Secrets** of type `kubernetes.io/service-account-token`
-- The auto-generated `default` ServiceAccount
-- The injected `kube-root-ca.crt` ConfigMap
-- System namespaces: `kube-system`, `kube-public`, `kube-node-lease` (full-cluster mode)
+| Category | Skipped |
+|---|---|
+| **Always skipped kinds** | `Event`, `Endpoints`, `EndpointSlice`, `Lease`, `ControllerRevision`, `ReplicationController`, `PodMetrics`, `NodeMetrics` |
+| **Controller-managed Pods** | Pods with `ownerReferences` set (created by Deployments, StatefulSets, Jobs, etc.) — standalone Pods are backed up |
+| **Controller-managed ReplicaSets** | ReplicaSets owned by a Deployment — standalone ReplicaSets are backed up |
+| **Auto-generated Secrets** | Secrets of type `kubernetes.io/service-account-token` |
+| **Auto-generated ConfigMaps** | `kube-root-ca.crt` |
+| **Default ServiceAccount** | The `default` SA in every namespace |
+| **System namespaces** | `kube-system`, `kube-public`, `kube-node-lease` (full-cluster mode only) |
 
 ### Options
 

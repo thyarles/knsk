@@ -32,7 +32,7 @@
   SKIPPED=0
 
   # Resource kinds to always skip (ephemeral, auto-generated, or controller-reconstructed)
-  SKIP_KINDS="^(Binding|Endpoints|EndpointSlice|Event|Lease|Pod|ReplicaSet|ControllerRevision|ReplicationController)$"
+  SKIP_KINDS="^(Binding|Endpoints|EndpointSlice|Event|Lease|ControllerRevision|ReplicationController|PodMetrics|NodeMetrics)$"
 
   # System namespaces excluded from a full-cluster backup
   SYS_NS="^(kube-system|kube-public|kube-node-lease)$"
@@ -70,6 +70,31 @@
     esac
   }
 
+# Map a Kind name to its kubectl short name (for display only)
+  short_kind () {
+    case "$1" in
+      ConfigMap)               echo "cm"     ;;
+      Deployment)              echo "deploy" ;;
+      DaemonSet)               echo "ds"     ;;
+      StatefulSet)             echo "sts"    ;;
+      ReplicaSet)              echo "rs"     ;;
+      Job)                     echo "job"    ;;
+      CronJob)                 echo "cj"     ;;
+      Service)                 echo "svc"    ;;
+      ServiceAccount)          echo "sa"     ;;
+      PersistentVolume)        echo "pv"     ;;
+      PersistentVolumeClaim)   echo "pvc"    ;;
+      HorizontalPodAutoscaler) echo "hpa"    ;;
+      PodDisruptionBudget)     echo "pdb"    ;;
+      NetworkPolicy)           echo "netpol" ;;
+      Ingress)                 echo "ing"    ;;
+      StorageClass)            echo "sc"     ;;
+      Pod)                     echo "po"     ;;
+      Secret)                  echo "secret" ;;
+      *)                       echo "$1"     ;;
+    esac
+  }
+
 # Fetch, clean and save all resources of one kind inside a namespace
   backup_kind () {
     local NS="$1" KIND="$2" RESOURCE="$3"
@@ -89,11 +114,22 @@
       fi
       [[ "$KIND" == "ConfigMap"      && "$NAME" == "kube-root-ca.crt" ]] && { (( SKIPPED++ )) || true; continue; }
       [[ "$KIND" == "ServiceAccount" && "$NAME" == "default"           ]] && { (( SKIPPED++ )) || true; continue; }
+      # Skip Pods and ReplicaSets that are managed by a controller; back up standalone ones
+      if [[ "$KIND" == "Pod" || "$KIND" == "ReplicaSet" ]]; then
+        local OWNER
+        OWNER=$(kubectl get "$RESOURCE" "$NAME" -n "$NS" \
+          -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null)
+        [ -n "$OWNER" ] && { (( SKIPPED++ )) || true; continue; }
+      fi
 
-      pp t2n "$KIND/$NAME"
+      local DISP_KIND; DISP_KIND=$(short_kind "$KIND")
+      pp t2n "$DISP_KIND/$NAME"
       local OUTFILE="$OUTDIR/$NS/$KIND-$NAME.yaml"
+      # PVCs: also strip spec.volumeName so the claim is not bound to a non-existent PV on restore
+      local YQ_EXPR="$YQ_DEL"
+      [[ "$KIND" == "PersistentVolumeClaim" ]] && YQ_EXPR="${YQ_DEL} | del(.spec.volumeName)"
       kubectl get "$RESOURCE" "$NAME" -n "$NS" -o yaml 2>/dev/null | \
-        yq "$YQ_DEL" > "$OUTFILE" 2>/dev/null
+        yq "$YQ_EXPR" > "$OUTFILE" 2>/dev/null
       if [ -s "$OUTFILE" ]; then
         pp saved
         (( SAVED++ )) || true
@@ -115,10 +151,11 @@
 
     while IFS= read -r PV_NAME; do
       [ -z "$PV_NAME" ] && continue
-      pp t2n "PersistentVolume/$PV_NAME"
+      pp t2n "pv/$PV_NAME"
       local OUTFILE="$OUTDIR/$NS/PersistentVolume-$PV_NAME.yaml"
+      # Strip spec.claimRef so the PV becomes Available (not Bound) on restore
       kubectl get pv "$PV_NAME" -o yaml 2>/dev/null | \
-        yq "$YQ_DEL" > "$OUTFILE" 2>/dev/null
+        yq "${YQ_DEL} | del(.spec.claimRef)" > "$OUTFILE" 2>/dev/null
       if [ -s "$OUTFILE" ]; then
         pp saved
         (( SAVED++ )) || true
@@ -128,6 +165,22 @@
       fi
       pp t3d "PersistentVolumes (cluster-scoped, bound to $NS)"
     done <<< "$PV_NAMES"
+  }
+
+# Save the Namespace object itself (prefixed 00- so it sorts first on restore)
+  backup_namespace () {
+    local NS="$1"
+    local OUTFILE="$OUTDIR/$NS/00-Namespace-$NS.yaml"
+    pp t2n "ns/$NS"
+    kubectl get namespace "$NS" -o yaml 2>/dev/null | \
+      yq "$YQ_DEL" > "$OUTFILE" 2>/dev/null
+    if [ -s "$OUTFILE" ]; then
+      pp saved
+      (( SAVED++ )) || true
+    else
+      rm -f "$OUTFILE"
+      pp error
+    fi
   }
 
 # Header
@@ -187,8 +240,9 @@
 
 # Back up each namespace
   for NS in $NAMESPACES; do
-    pp t2 ":::: Saving namespace $G$NS"
+    pp t2 "Saving namespace $G$NS"
     mkdir -p "$OUTDIR/$NS"
+    backup_namespace "$NS"
 
     # Discover all namespaced resource types dynamically — no hardcoded list
     while IFS= read -r LINE; do
@@ -208,5 +262,5 @@
   pp sep
   pp t2 "Saved   ${G}$SAVED${S}${Y} resource(s) to ${G}${OUTDIR}/${S}"
   pp t2 "Skipped ${A}$SKIPPED${S}${Y} auto-generated resource(s)"
-  (( SAVED > 0 )) && pp t3 "To restore: kubectl apply -f ${G}${OUTDIR}/<namespace>/${Y}" || true
+  (( SAVED > 0 )) && pp t2 "Restore ${G}kubectl apply -f ${OUTDIR}/<namespace>/${Y}" || true
   echo
