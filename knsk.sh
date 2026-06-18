@@ -455,6 +455,6 @@
 
 # End of script
   (( 1-$FOUND )) || (( $DELBRK )) || (( $DELRES )) || (( $DELORP )) || \
-  pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
+  pp t2 ":: Run '$G./knsk.sh --help$Y' to get more options."
   pp t2 ":: Done in $SECONDS seconds.$N"
   exit 0
