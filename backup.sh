@@ -53,14 +53,14 @@
               local _vis; _vis=$(printf '%s' "$_t" | sed 's/\x1b\[[0-9;]*m//g')
               local _pad=$(( 54 - ${#_vis} )); [[ $_pad -lt 2 ]] && _pad=2
               local _dots; _dots=$(printf '%.0s.' $(seq 1 "$_pad"))
-              echo -ne "$N  $Y▶  $_t $A$_dots$S"                   ;;
+              echo -ne "$N  $Y:: $_t $A$_dots$S"                   ;;
       t3    ) echo -e  "   $Y> ${2:-}$S"                            ;;
       t3n   ) echo -ne "   $Y> ${2:-}$A...$S"                       ;;
       t3d   ) echo -e  "     $A${2:-}$S"                            ;;
       t4    ) echo -e  "      $Y> ${2:-}$S"                         ;;
       t4n   ) echo -ne "      $Y> ${2:-}$A...$S"                    ;;
       t4d   ) echo -e  "        $A${2:-}$S"                         ;;
-      sep   ) echo -e  "$N$A  $(printf '%.0s─' $(seq 1 50))$S"      ;;
+      sep   ) echo -e  "$N$A  $(printf '%.0s:' $(seq 1 70))$S"      ;;
       ok    ) echo -e  "$G ok$S"                                    ;;
       nfound) echo -e  "$G not found$S"                             ;;
       saved ) echo -e  "$G saved$S"                                 ;;
@@ -187,7 +187,7 @@
 
 # Back up each namespace
   for NS in $NAMESPACES; do
-    pp t2 "Namespace: $G$NS"
+    pp t2 ":::: Saving namespace $G$NS"
     mkdir -p "$OUTDIR/$NS"
 
     # Discover all namespaced resource types dynamically — no hardcoded list
@@ -206,7 +206,7 @@
 
 # Summary
   pp sep
-  pp t3 "Saved   ${G}$SAVED${S}${Y} resource(s) to ${G}${OUTDIR}/${S}"
-  pp t3 "Skipped ${A}$SKIPPED${S}${Y} auto-generated resource(s)"
-  (( SAVED > 0 )) && pp t3 "Restore: kubectl apply -f ${G}${OUTDIR}/<namespace>/${Y}" || true
+  pp t2 "Saved   ${G}$SAVED${S}${Y} resource(s) to ${G}${OUTDIR}/${S}"
+  pp t2 "Skipped ${A}$SKIPPED${S}${Y} auto-generated resource(s)"
+  (( SAVED > 0 )) && pp t3 "To restore: kubectl apply -f ${G}${OUTDIR}/<namespace>/${Y}" || true
   echo
