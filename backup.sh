@@ -40,25 +40,33 @@
   # yq expression that strips all k8s-managed fields so the YAML is safe for 'kubectl apply'
   YQ_DEL='del(.status, .metadata.uid, .metadata.resourceVersion, .metadata.generation, .metadata.creationTimestamp, .metadata.deletionTimestamp, .metadata.deletionGracePeriodSeconds, .metadata.selfLink, .metadata.managedFields, .metadata.ownerReferences, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"])'
 
-# Function to format and print messages (same style as knsk.sh)
+# Function to format and print messages
   pp () {
     case $1 in
-      t1    ) echo  -e "$N$G$2$S"                        ;;
-      t2    ) echo  -e "$N$Y$2$S"                        ;;
-      t3    ) echo  -e "$Y.: $2"                         ;;
-      t4    ) echo  -e "$Y   > $2"                       ;;
-      t2n   ) echo -ne "$N$Y$2...$S"                     ;;
-      t3n   ) echo -ne "$Y.: $2...$S"                    ;;
-      t3d   ) echo  -e "$A   $2"                         ;;
-      t4n   ) echo -ne "$Y   > $2...$S"                  ;;
-      t4d   ) echo  -e "$A     $2$S"                     ;;
-      ok    ) echo  -e "$G ok$S"                         ;;
-      nfound) echo  -e "$G not found$S"                  ;;
-      saved ) echo  -e "$G saved$S"                      ;;
-      skip  ) echo  -e "$A skipped$S"                    ;;
-      error ) echo  -e "$R error$S"                      ;;
-      fail  ) echo  -e "$R fail$S$N$R$N$2.$S$N"
-              exit 1
+      t1    ) local _t="${2:-}"
+              local _vis; _vis=$(printf '%s' "$_t" | sed 's/\x1b\[[0-9;]*m//g')
+              local _line; _line=$(printf '%.0s═' $(seq 1 "${#_vis}"))
+              echo -e "$N$G  $_t"
+              echo -e "  $_line$S"                                  ;;
+      t2    ) echo -e "$N$Y  ${2:-}$S"                              ;;
+      t2n   ) local _t="${2:-}"
+              local _vis; _vis=$(printf '%s' "$_t" | sed 's/\x1b\[[0-9;]*m//g')
+              local _pad=$(( 54 - ${#_vis} )); [[ $_pad -lt 2 ]] && _pad=2
+              local _dots; _dots=$(printf '%.0s.' $(seq 1 "$_pad"))
+              echo -ne "$N  $Y▶  $_t $A$_dots$S"                   ;;
+      t3    ) echo -e  "   $Y> ${2:-}$S"                            ;;
+      t3n   ) echo -ne "   $Y> ${2:-}$A...$S"                       ;;
+      t3d   ) echo -e  "     $A${2:-}$S"                            ;;
+      t4    ) echo -e  "      $Y> ${2:-}$S"                         ;;
+      t4n   ) echo -ne "      $Y> ${2:-}$A...$S"                    ;;
+      t4d   ) echo -e  "        $A${2:-}$S"                         ;;
+      sep   ) echo -e  "$N$A  $(printf '%.0s─' $(seq 1 50))$S"      ;;
+      ok    ) echo -e  "$G ok$S"                                    ;;
+      nfound) echo -e  "$G not found$S"                             ;;
+      saved ) echo -e  "$G saved$S"                                 ;;
+      skip  ) echo -e  "$A skipped$S"                               ;;
+      error ) echo -e  "$R error$S"                                 ;;
+      fail  ) echo -e  "$R fail$S$N$R$N${2:-}.$S$N"; exit 1         ;;
     esac
   }
 
@@ -82,7 +90,7 @@
       [[ "$KIND" == "ConfigMap"      && "$NAME" == "kube-root-ca.crt" ]] && { (( SKIPPED++ )) || true; continue; }
       [[ "$KIND" == "ServiceAccount" && "$NAME" == "default"           ]] && { (( SKIPPED++ )) || true; continue; }
 
-      pp t4n "$KIND/$NAME"
+      pp t2n "$KIND/$NAME"
       local OUTFILE="$OUTDIR/$NS/$KIND-$NAME.yaml"
       kubectl get "$RESOURCE" "$NAME" -n "$NS" -o yaml 2>/dev/null | \
         yq "$YQ_DEL" > "$OUTFILE" 2>/dev/null
@@ -105,10 +113,9 @@
       --no-headers 2>/dev/null | awk -v ns="$NS" '$2 == ns {print $1}')
     [ -z "$PV_NAMES" ] && return
 
-    pp t3n "PersistentVolumes bound to $NS"
     while IFS= read -r PV_NAME; do
       [ -z "$PV_NAME" ] && continue
-      pp t4n "PersistentVolume/$PV_NAME"
+      pp t2n "PersistentVolume/$PV_NAME"
       local OUTFILE="$OUTDIR/$NS/PersistentVolume-$PV_NAME.yaml"
       kubectl get pv "$PV_NAME" -o yaml 2>/dev/null | \
         yq "$YQ_DEL" > "$OUTFILE" 2>/dev/null
@@ -119,6 +126,7 @@
         rm -f "$OUTFILE"
         pp error
       fi
+      pp t3d "PersistentVolumes (cluster-scoped, bound to $NS)"
     done <<< "$PV_NAMES"
   }
 
@@ -167,11 +175,11 @@
     pp ok
     NAMESPACES="$NS_ARG"
   else
-    echo -e "$N${R}Warning:${S} ${Y}A full-cluster backup may expose sensitive data in Secrets and ConfigMaps.${S}"
-    echo -e "${A}System namespaces (kube-system, kube-public, kube-node-lease) will be excluded.${S}"
-    echo -ne "${Y}Continue? [y/N] ${S}"
+    echo -e "$N   $R  Warning:$S $YA full-cluster backup may expose sensitive data in Secrets and ConfigMaps.$S"
+    echo -e "     $ASystem namespaces (kube-system, kube-public, kube-node-lease) will be excluded.$S"
+    echo -ne "$N   ${Y}  Continue? [y/N] ${S}"
     read -r CONFIRM
-    [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo -e "${G}Aborted.${S}$N"; exit 0; }
+    [[ "$CONFIRM" =~ ^[Yy]$ ]] || { echo -e "$N     ${A}Aborted.$S$N"; exit 0; }
     NAMESPACES=$(kubectl get namespaces \
       -o jsonpath='{.items[*].metadata.name}' 2>/dev/null | \
       tr ' ' '\n' | grep -Ev "$SYS_NS")
@@ -197,7 +205,8 @@
   done
 
 # Summary
-  pp t2 "Done"
+  pp sep
   pp t3 "Saved   ${G}$SAVED${S}${Y} resource(s) to ${G}${OUTDIR}/${S}"
   pp t3 "Skipped ${A}$SKIPPED${S}${Y} auto-generated resource(s)"
-  (( SAVED > 0 )) && echo -e "${N}${A}Restore a namespace with:  kubectl apply -f ${OUTDIR}/<namespace>/${S}$N" || true
+  (( SAVED > 0 )) && pp t3 "Restore: kubectl apply -f ${G}${OUTDIR}/<namespace>/${Y}" || true
+  echo
