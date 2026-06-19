@@ -25,15 +25,16 @@
   KPORT=8765   # Default port to up kubectl proxy
   TIME=15      # Default timeout to wait for kubectl command responses
   WAIT=7       # Default time to wait Kubernetes do clean deletion
-  C='\e[96m'   # Cyan
-  M='\e[95m'   # Magenta
-  B='\e[94m'   # Blue
-  Y='\e[93m'   # Yellow
-  G='\e[92m'   # Green
-  R='\e[91m'   # Red
-  A='\e[90m'   # Gray
-  S='\e[0m'    # Reset
-  N='\n'       # New line
+  C=$'\e[96m'   # Cyan
+  M=$'\e[95m'   # Magenta
+  B=$'\e[94m'   # Blue
+  Y=$'\e[93m'   # Yellow
+  G=$'\e[92m'   # Green
+  R=$'\e[91m'   # Red
+  A=$'\e[90m'   # Gray
+  S=$'\e[0m'    # Reset
+  N=$'\n'       # New line
+  
 
 # Function to show help
   show_help () {
@@ -54,6 +55,16 @@
     echo -e "  $Y-h --help$S\t\tShow this help\n"
     exit 0
   }
+
+# Force no-color when terminal does not support ANSI colors
+if [ -n "${NO_COLOR:-}" ] ||
+   [ ! -t 1 ] ||
+   [ "${TERM:-}" = "dumb" ] ||
+   ! command -v tput >/dev/null 2>&1 ||
+   ! tput setaf 1 >/dev/null 2>&1
+then
+    set -- "$@" --no-color
+fi
 
 # Check for parameters
   while (( "$#" )); do

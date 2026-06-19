@@ -15,15 +15,25 @@
 # ----------------------------------------------------------------------------
 
 # Variables
-  C='\e[96m'   # Cyan
-  M='\e[95m'   # Magenta
-  B='\e[94m'   # Blue
-  Y='\e[93m'   # Yellow
-  G='\e[92m'   # Green
-  R='\e[91m'   # Red
-  A='\e[90m'   # Gray
-  S='\e[0m'    # Reset
-  N='\n'       # New line
+  C=$'\e[96m'   # Cyan
+  M=$'\e[95m'   # Magenta
+  B=$'\e[94m'   # Blue
+  Y=$'\e[93m'   # Yellow
+  G=$'\e[92m'   # Green
+  R=$'\e[91m'   # Red
+  A=$'\e[90m'   # Gray
+  S=$'\e[0m'    # Reset
+  N=$'\n'       # New line
+
+  # Force no-color when terminal does not support ANSI colors
+if [ -n "${NO_COLOR:-}" ] ||
+   [ ! -t 1 ] ||
+   [ "${TERM:-}" = "dumb" ] ||
+   ! command -v tput >/dev/null 2>&1 ||
+   ! tput setaf 1 >/dev/null 2>&1
+then
+  C=''; M=''; B=''; Y=''; G=''; R=''; S=''; A=''
+fi
 
   OUTDIR="knsk_backup/$(date +%Y%m%d_%Hh%M)"
   NS_ARG=""
