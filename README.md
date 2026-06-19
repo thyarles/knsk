@@ -28,7 +28,7 @@ Running without flags performs a **read-only diagnosis** and reports:
 
 ```bash
 # Clone and run (diagnosis only — no changes made)
-git clone https://github.com/thyarles/knsk.git
+git clone https://github.com/provadigital/knsk.git
 cd knsk && chmod +x knsk.sh
 ./knsk.sh
 
