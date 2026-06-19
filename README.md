@@ -147,6 +147,36 @@ backup.sh [namespace] [options]
   --outdir, -o <path>     Write output to this directory instead of the default knsk_backup/<timestamp>/
 ```
 
+### Testing locally
+
+A `test_scripts.yaml` file is included to spin up sample workloads across three namespaces (`team-a`, `team-b`, `team-c`) and verify the full backup/restore cycle:
+
+```bash
+# 1. Deploy test resources
+kubectl apply -f test_scripts.yaml
+
+# 2. Run a full-cluster backup
+./backup.sh
+
+# 3. Delete the test namespaces
+kubectl delete ns team-a team-b team-c
+
+# 4. Restore from backup (replace the timestamp with the one generated in step 2)
+kubectl apply -f knsk_backup/<timestamp>/team-a/
+kubectl apply -f knsk_backup/<timestamp>/team-b/
+kubectl apply -f knsk_backup/<timestamp>/team-c/
+```
+
+Expected result: all namespaces, Deployments, ConfigMaps, Secrets, Services, StatefulSets, PersistentVolumes, PersistentVolumeClaims, and Jobs are recreated cleanly with no errors.
+
+> **Intentional edge case:** `team-b` contains a PVC that will end up in `Lost` phase after restore — the backing PV is recreated but the binding reference no longer matches. This is by design, to exercise `knsk.sh --delete-lost`. Run the following to clean it up and allow the StatefulSet pods to schedule:
+>
+> ```bash
+> ./knsk.sh --delete-lost
+> ```
+>
+> After this step, all scripts have been fully tested end-to-end.
+
 ### Requirements
 
 | Tool | Required by | Install |

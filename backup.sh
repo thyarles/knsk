@@ -48,7 +48,34 @@ fi
   SYS_NS="^(kube-system|kube-public|kube-node-lease)$"
 
   # yq expression that strips all k8s-managed fields so the YAML is safe for 'kubectl apply'
-  YQ_DEL='del(.status, .metadata.uid, .metadata.resourceVersion, .metadata.generation, .metadata.creationTimestamp, .metadata.deletionTimestamp, .metadata.deletionGracePeriodSeconds, .metadata.selfLink, .metadata.managedFields, .metadata.ownerReferences, .metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"], .metadata.annotations["pv.kubernetes.io/bind-completed"], .metadata.annotations["pv.kubernetes.io/bound-by-controller"])'
+  YQ_DEL='del(.status)'
+  YQ_DEL+=' | del(.metadata.uid)'
+  YQ_DEL+=' | del(.metadata.resourceVersion)'
+  YQ_DEL+=' | del(.metadata.generation)'
+  YQ_DEL+=' | del(.metadata.creationTimestamp)'
+  YQ_DEL+=' | del(.metadata.deletionTimestamp)'
+  YQ_DEL+=' | del(.metadata.deletionGracePeriodSeconds)'
+  YQ_DEL+=' | del(.metadata.selfLink)'
+  YQ_DEL+=' | del(.metadata.managedFields)'
+  YQ_DEL+=' | del(.metadata.ownerReferences)'
+
+  # Job-specific: strip auto-generated selector and pod-template labels tied to the original UID
+  YQ_DEL_JOB="$YQ_DEL"
+  YQ_DEL_JOB+=' | del(.spec.selector)'
+  YQ_DEL_JOB+=' | del(.spec.template.metadata.labels["batch.kubernetes.io/controller-uid"])'
+  YQ_DEL_JOB+=' | del(.spec.template.metadata.labels["batch.kubernetes.io/job-name"])'
+  YQ_DEL_JOB+=' | del(.spec.template.metadata.labels["controller-uid"])'
+  YQ_DEL_JOB+=' | del(.spec.template.metadata.labels["job-name"])'
+  YQ_DEL_JOB+=' | del(.metadata.labels["batch.kubernetes.io/controller-uid"])'
+  YQ_DEL_JOB+=' | del(.metadata.labels["batch.kubernetes.io/job-name"])'
+  YQ_DEL_JOB+=' | del(.metadata.labels["controller-uid"])'
+  YQ_DEL_JOB+=' | del(.metadata.labels["job-name"])'
+
+  # PV-specific: strip annotations set by the PV/PVC bind controller
+  YQ_DEL_PV="$YQ_DEL"
+  YQ_DEL_PV+=' | del(.metadata.annotations["kubectl.kubernetes.io/last-applied-configuration"])'
+  YQ_DEL_PV+=' | del(.metadata.annotations["pv.kubernetes.io/bind-completed"])'
+  YQ_DEL_PV+=' | del(.metadata.annotations["pv.kubernetes.io/bound-by-controller"])'
 
 # Function to format and print messages
   pp () {
@@ -138,6 +165,7 @@ fi
       # PVCs: also strip spec.volumeName so the claim is not bound to a non-existent PV on restore
       local YQ_EXPR="$YQ_DEL"
       [[ "$KIND" == "PersistentVolumeClaim" ]] && YQ_EXPR="${YQ_DEL} | del(.spec.volumeName)"
+      [[ "$KIND" == "Job"                   ]] && YQ_EXPR="$YQ_DEL_JOB"
       kubectl get "$RESOURCE" "$NAME" -n "$NS" -o yaml 2>/dev/null | \
         yq "$YQ_EXPR" > "$OUTFILE" 2>/dev/null
       if [ -s "$OUTFILE" ]; then
@@ -163,7 +191,7 @@ fi
       [ -z "$PV_NAME" ] && continue
       pp t2n "pv/$PV_NAME"
       local OUTFILE="$OUTDIR/$NS/PersistentVolume-$PV_NAME.yaml"
-      local YQ_EXPR="$YQ_DEL"
+      local YQ_EXPR="$YQ_DEL_PV"
       kubectl get pv "$PV_NAME" -o yaml 2>/dev/null | \
         yq "$YQ_EXPR" > "$OUTFILE" 2>/dev/null
       if [ -s "$OUTFILE" ]; then
