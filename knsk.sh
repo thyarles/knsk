@@ -138,8 +138,6 @@ fi
     esac
   done
 
-
-
 # Function to format and print messages
   pp () {
     case $1 in
