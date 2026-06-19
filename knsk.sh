@@ -175,11 +175,11 @@ fi
     OLD_IFS="$IFS"; IFS=:; set -- $*; SECS=$1; MSG=$2
     while [ $SECS -gt 0 ]; do
       sleep 1 &
-      printf "\r   $Y> $MSG$S... $G%02d:%02d$S" $(( (SECS/60)%60)) $((SECS%60))
+      printf "\r   $A  $MSG.......... %02d:%02d$S" $(( (SECS/60)%60)) $((SECS%60))
       SECS=$(( $SECS - 1 ))
       wait
     done
-    printf "\r   $Y> $MSG$S...$G ok      $S$N"
+    printf "\r   $A  $MSG..........$G ok     $S$N"
     set -u; IFS="$OLD_IFS"; export CLEAN=0
   }
 
@@ -417,14 +417,14 @@ fi
     (( $PRINTED )) || pp found && PRINTED=1
     pp t3n "$R$LOST_NS$S$Y/pvc/$R$LOST_PVC$S"
     if (( $DELLOST )); then
-      CMD="timeout $TIME $K -n $LOST_NS delete pvc $LOST_PVC --grace-period=0 --force=true"
+      CMD="timeout $TIME $K -n $LOST_NS delete pvc $LOST_PVC"
       if (( $DRYRUN )); then
         pp dryrun
         pp t3d "$CMD"
       else
         CLEAN=1
-        $CMD >& /dev/null; E=$?
-        if [ $E -gt 0 ]; then pp error; else pp del; fi
+        bash -c "${CMD}" >& /dev/null; E=$?
+        if [ $? -gt 0 ]; then pp error; else pp del; fi
       fi
     else
       pp skip
