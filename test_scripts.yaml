@@ -1,0 +1,243 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-a
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-b
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-c
+
+# -------------------------------------------------
+# TEAM A RESOURCES
+# -------------------------------------------------
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: team-a
+data:
+  APP: "team-a"
+  ENV: "dev"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-a
+  namespace: team-a
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web-a
+  template:
+    metadata:
+      labels:
+        app: web-a
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-a-svc
+  namespace: team-a
+spec:
+  selector:
+    app: web-a
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-a
+  namespace: team-a
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker-a
+  template:
+    metadata:
+      labels:
+        app: worker-a
+    spec:
+      containers:
+        - name: busybox
+          image: busybox
+          command: ["sh", "-c", "while true; do echo team-a working; sleep 15; done"]
+
+# -------------------------------------------------
+# TEAM B RESOURCES
+# -------------------------------------------------
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+  namespace: team-b
+type: Opaque
+stringData:
+  password: "team-b-pass"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data-b
+  namespace: team-b
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-b
+  namespace: team-b
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-b
+  template:
+    metadata:
+      labels:
+        app: api-b
+    spec:
+      containers:
+        - name: app
+          image: alpine
+          command: ["sh", "-c", "while true; do sleep 20; done"]
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db-b
+  namespace: team-b
+spec:
+  serviceName: db-b-svc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-b
+  template:
+    metadata:
+      labels:
+        app: db-b
+    spec:
+      containers:
+        - name: db
+          image: redis:7
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-b-svc
+  namespace: team-b
+spec:
+  clusterIP: None
+  selector:
+    app: db-b
+  ports:
+    - port: 6379
+      targetPort: 6379
+
+# -------------------------------------------------
+# TEAM C RESOURCES
+# -------------------------------------------------
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-c
+  namespace: team-c
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend-c
+  template:
+    metadata:
+      labels:
+        app: frontend-c
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-c-svc
+  namespace: team-c
+spec:
+  selector:
+    app: frontend-c
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job-c
+  namespace: team-c
+spec:
+  template:
+    spec:
+      containers:
+        - name: job
+          image: busybox
+          command: ["sh", "-c", "echo Hello from team-c job"]
+      restartPolicy: Never
