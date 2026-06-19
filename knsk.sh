@@ -13,19 +13,18 @@
 # Variables
   set -u       # Ensure declaration of variables before use it
   K='kubectl'  # Short for kubectl
-               # TODO: Check version of kubectl and work only for 1.16 and upper
   DELBRK=0     # Don't delete broken API by default
   DELRES=0     # Don't delete inside resources by default
   DELORP=0     # Don't delete orphan resources by default
-               # TODO: Change the way to check ofr orphan resources
+  DELWHK=0     # Don't delete broken webhooks by default
+  DELLOST=0    # Don't delete Lost PVCs by default
   DRYRUN=0     # Show the commands to be executed and don't run them
-  FORCE=0      # Don't force deletion with kubeclt proxy by default
-               # TODO: If in k8s 1.17 or upper, try go get the reason of delayed ns deletion
+  FORCE=0      # Don't force deletion of stuck namespaces by default
   CLEAN=0      # Start clean flag
   FOUND=0      # Start found flag
   KPORT=8765   # Default port to up kubectl proxy
   TIME=15      # Default timeout to wait for kubectl command responses
-  WAIT=60      # Default time to wait Kubernetes do clean deletion
+  WAIT=7       # Default time to wait Kubernetes do clean deletion
   C='\e[96m'   # Cyan
   M='\e[95m'   # Magenta
   B='\e[94m'   # Blue
@@ -38,19 +37,21 @@
 
 # Function to show help
   show_help () {
-    echo -e "\n$(basename $0) [options]\n"
-    echo -e "  --dry-run\t\tShow what will be executed instead of execute it (use with '--delete-*' options)"
-    echo -e "  --skip-tls\t\tSet --insecure-skip-tls-verify on kubectl call"
-    echo -e "  --delete-api\t\tDelete broken API found in your Kubernetes cluster"
-    echo -e "  --delete-resource\tDelete stuck resources found in your stuck namespaces"
-    echo -e "  --delete-orphan\tDelete orphan resources found in your cluster"
-    echo -e "  --delete-all\t\tDelete resources of stuck namespaces and broken API"
-    echo -e "  --force\t\tForce deletion of stuck namespaces even if a clean deletion fail"
-    echo -e "  --port {number}\tUp kubectl proxy on this port, default is 8765"
-    echo -e "  --timeout {number}\tMax time (in seconds) to wait for Kubectl commands (default = 15)"
-    echo -e "  --no-color\t\tAll output without colors (useful for scripts)"
-    echo -e "  --kubeconfig {path}\tThe path to a custom kubeconfig.yaml file (useful for scripts)"
-    echo -e "  -h --help\t\tShow this help\n"
+    echo -e "\n$G$(basename $0)$S $A[options]$S\n"
+    echo -e "  $Y--dry-run$S\t\tShow what will be executed instead of execute it $A(use with '--delete-*' options)$S"
+    echo -e "  $Y--skip-tls$S\t\tSet --insecure-skip-tls-verify on kubectl calls"
+    echo -e "  $Y--delete-api$S\t\tDelete broken API found in your Kubernetes cluster"
+    echo -e "  $Y--delete-resource$S\tDelete stuck resources found in your stuck namespaces"
+    echo -e "  $Y--delete-orphan$S\tDelete orphan resources found in your cluster"
+    echo -e "  $Y--delete-webhook$S\tDelete broken admission webhooks blocking namespace deletion"
+    echo -e "  $Y--delete-lost$S	Delete PersistentVolumeClaims stuck in Lost phase"
+    echo -e "  $Y--delete-all$S		Delete resources of stuck namespaces, broken API, broken webhooks and Lost PVCs"
+    echo -e "  $Y--force$S\t\tForce deletion of stuck namespaces even if a clean deletion fails"
+    echo -e "  $Y--port$S {number}\tUp kubectl proxy on this port $A(default: 8765)$S"
+    echo -e "  $Y--timeout$S {number}\tMax time in seconds to wait for kubectl commands $A(default: 15)$S"
+    echo -e "  $Y--no-color$S\t\tAll output without colors $A(useful for scripts)$S"
+    echo -e "  $Y--kubeconfig$S {path}\tPath to a custom kubeconfig.yaml file $A(useful for scripts)$S"
+    echo -e "  $Y-h --help$S\t\tShow this help\n"
     exit 0
   }
 
@@ -77,10 +78,20 @@
         DELORP=1
         shift
       ;;
+      --delete-webhook)
+        DELWHK=1
+        shift
+      ;;
+      --delete-lost)
+        DELLOST=1
+        shift
+      ;;
       --delete-all)
         DELBRK=1
         DELRES=1
         DELORP=1
+        DELWHK=1
+        DELLOST=1
         shift
       ;;
       --force)
@@ -118,27 +129,33 @@
 
 # Function to format and print messages
   pp () {
-    # First argument is the type of message
-    # Second argument is the message
     case $1 in
-      t1    ) echo  -e "$N$G$2$S"                        ;;
-      t2    ) echo  -e "$N$Y$2$S"                        ;;
-      t3    ) echo  -e "$Y.: $2"                         ;;
-      t4    ) echo  -e "$Y   > $2"                       ;;
-      t2n   ) echo -ne "$N$Y$2...$S"                     ;;
-      t3n   ) echo -ne "$Y.: $2...$S"                    ;;
-      t3d   ) echo  -e "$A   $2"                         ;;
-      t4n   ) echo -ne "$Y   > $2...$S"                  ;;
-      t4d   ) echo  -e "$A     $2$S"                     ;;
-      ok    ) echo  -e "$G ok$S"                         ;;
-      found ) echo  -e "$C found$S"; FOUND=1             ;;
-      nfound) echo  -e "$G not found$S"                  ;;
-      dryrun) echo  -e "$M dry-run$S"                    ;;
-      del   ) echo  -e "$G deleted$S"                    ;;
-      skip  ) echo  -e "$C deletion skipped$S"           ;;
-      error ) echo  -e "$R error$S"                      ;;
-      fail  ) echo  -e "$R fail$S$N$R$N$2.$S$N"
-              exit 1
+      t1    ) local _t="${2:-}"
+              local _vis; _vis=$(printf '%s' "$_t" | sed 's/\x1b\[[0-9;]*m//g')
+              local _line; _line=$(printf '%.0s═' $(seq 1 "${#_vis}"))
+              echo -e "$N$G  $_t"
+              echo -e "  $_line$S"                                  ;;
+      t2    ) echo -e  "$N$Y  ${2:-}$S"                            ;;
+      t2n   ) local _t="${2:-}"
+              local _vis; _vis=$(printf '%s' "$_t" | sed 's/\x1b\[[0-9;]*m//g')
+              local _pad=$(( 54 - ${#_vis} )); [[ $_pad -lt 2 ]] && _pad=2
+              local _dots; _dots=$(printf '%.0s.' $(seq 1 "$_pad"))
+              echo -ne "$N  $Y:: $_t $A$_dots$S"                   ;;
+      t3    ) echo -e  "   $Y  ${2:-}$S"                           ;;
+      t3n   ) echo -ne "   $Y  ${2:-}$A...$S"                      ;;
+      t3d   ) echo -e  "     $A${2:-}$S"                           ;;
+      t4    ) echo -e  "      $Y> ${2:-}$S"                        ;;
+      t4n   ) echo -ne "      $Y> ${2:-}$A...$S"                   ;;
+      t4d   ) echo -e  "        $A${2:-}$S"                        ;;
+      sep   ) echo -e  "$N$A  $(printf '%.0s:' $(seq 1 70))$S"     ;;
+      ok    ) echo -e  "$G ok$S"                                   ;;
+      found ) echo -e  "$C found$S"; FOUND=1                       ;;
+      nfound) echo -e  "$G not found$S"                            ;;
+      dryrun) echo -e  "$M dry-run$S"                              ;;
+      del   ) echo -e  "$G deleted$S"                              ;;
+      skip  ) echo -e  "$A skipped$S"                              ;;
+      error ) echo -e  "$R error$S"                                ;;
+      fail  ) echo -e  "$R fail$S$N$R$N${2:-}.$S$N"; exit 1        ;;
     esac
   }
 
@@ -147,20 +164,33 @@
     OLD_IFS="$IFS"; IFS=:; set -- $*; SECS=$1; MSG=$2
     while [ $SECS -gt 0 ]; do
       sleep 1 &
-      printf "\r.: $Y$MSG$S... $G%02d:%02d$S" $(( (SECS/60)%60)) $((SECS%60))
+      printf "\r   $Y> $MSG$S... $G%02d:%02d$S" $(( (SECS/60)%60)) $((SECS%60))
       SECS=$(( $SECS - 1 ))
       wait
     done
-    printf "\r.: $Y$MSG...$G ok      $S$N"
+    printf "\r   $Y> $MSG$S...$G ok      $S$N"
     set -u; IFS="$OLD_IFS"; export CLEAN=0
   }
 
-# Check if kubectl is available
+# Check if kubectl is available and get its version
   pp t1 "Kubernetes NameSpace Killer"
   pp t2n "Checking if kubectl is configured"
   $K cluster-info >& /dev/null; E=$?
   [ $E -gt 0 ] && pp fail "Check if the kubectl is installed and configured"
   pp ok
+
+# Check kubectl client version (minimum 1.20 recommended)
+  pp t2n "Checking kubectl version"
+  KVER=$($K version --client 2>/dev/null | grep -o '[Vv][0-9][0-9]*\.[0-9][0-9]*' | head -1 | tr -d 'Vv')
+  KMAJ=$(echo "$KVER" | cut -d. -f1)
+  KMIN=$(echo "$KVER" | cut -d. -f2 | tr -d '+')
+  if [ -z "$KVER" ]; then
+    echo -e " ${Y}unable to detect version${S}"
+  elif [ "${KMAJ:-0}" -lt 1 ] || ( [ "${KMAJ:-0}" -eq 1 ] && [ "${KMIN:-0}" -lt 20 ] ); then
+    echo -e " ${R}($KVER — upgrade to 1.20+ recommended)${S}"
+  else
+    echo -e " ${G}$KVER${S}"
+  fi
 
 # Check for broken APIs
   pp t2n "Checking for unavailable apiservices"
@@ -188,6 +218,51 @@
     done
     [ $CLEAN -gt 0 ] && timer $WAIT "apiresources deleted, waiting to see if Kubernetes does a clean namespace deletion"
   fi
+
+# Check for broken admission webhooks (a leading cause of stuck namespaces in k8s 1.20+)
+  pp t2n "Checking for broken admission webhooks"
+  WHKS=$( { $K get validatingwebhookconfigurations -o custom-columns='NAME:.metadata.name,NS:.webhooks[*].clientConfig.service.namespace,SVC:.webhooks[*].clientConfig.service.name,FAIL:.webhooks[*].failurePolicy' --no-headers 2>/dev/null; \
+             $K get mutatingwebhookconfigurations   -o custom-columns='NAME:.metadata.name,NS:.webhooks[*].clientConfig.service.namespace,SVC:.webhooks[*].clientConfig.service.name,FAIL:.webhooks[*].failurePolicy' --no-headers 2>/dev/null; } )
+  OLD_IFS=$IFS; IFS=$'\n'; WHK_BROKEN=0
+  while IFS= read -r WHK_LINE; do
+    [ -z "$WHK_LINE" ] && continue
+    WHK_NAME=$(echo "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f1)
+    WHK_NS=$(echo   "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f2)
+    WHK_SVC=$(echo  "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f3)
+    WHK_FAIL=$(echo "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f4)
+    # Skip webhooks that use a URL instead of a service reference
+    [ "$WHK_SVC" = "<none>" ] && continue
+    [ -z "$WHK_SVC" ] && continue
+    # Check if the backend service exists
+    $K get service "$WHK_SVC" -n "$WHK_NS" >& /dev/null; E=$?
+    if [ $E -gt 0 ]; then
+      WHK_BROKEN=1
+      FOUND=1
+      if [ "$WHK_FAIL" = "Fail" ]; then
+        pp t3n "$R$WHK_NAME$S$Y (failurePolicy=Fail, svc: $R$WHK_NS/$WHK_SVC$S$Y — blocks deletions)"
+      else
+        pp t3n "$R$WHK_NAME$S$Y (svc: $R$WHK_NS/$WHK_SVC$S$Y not found)"
+      fi
+      if (( $DELWHK )); then
+        # Detect whether it is validating or mutating
+        $K get validatingwebhookconfiguration "$WHK_NAME" >& /dev/null && WHK_TYPE="validatingwebhookconfiguration" || WHK_TYPE="mutatingwebhookconfiguration"
+        CMD="timeout $TIME $K delete $WHK_TYPE $WHK_NAME"
+        if (( $DRYRUN )); then
+          pp dryrun
+          pp t3d "$CMD"
+        else
+          CLEAN=1
+          $CMD >& /dev/null; E=$?
+          if [ $E -gt 0 ]; then pp error; else pp del; fi
+        fi
+      else
+        pp skip
+      fi
+    fi
+  done <<< "$WHKS"
+  (( $WHK_BROKEN )) || pp nfound
+  IFS=$OLD_IFS
+  [ $CLEAN -gt 0 ] && timer $WAIT "broken webhooks deleted, waiting to see if Kubernetes does a clean namespace deletion"
 
 # Search for resources in stuck namespaces
   pp t2n "Checking for stuck namespaces"
@@ -321,29 +396,46 @@
   IFS=$OLD_IFS
   [ $CLEAN -gt 0 ] && timer $WAIT "resources deleted, waiting to Kubernetes sync"
 
+# Search for PersistentVolumeClaims stuck in Lost phase
+  pp t2n "Checking for Lost PersistentVolumeClaims"
+  OLD_IFS=$IFS; IFS=$'\n'; PRINTED=0
+  while IFS= read -r LINE; do
+    [ -z "$LINE" ] && continue
+    LOST_NS=$(echo  "$LINE" | tr -s ' ' | cut -d ' ' -f1)
+    LOST_PVC=$(echo "$LINE" | tr -s ' ' | cut -d ' ' -f2)
+    (( $PRINTED )) || pp found && PRINTED=1
+    pp t3n "$R$LOST_NS$S$Y/pvc/$R$LOST_PVC$S"
+    if (( $DELLOST )); then
+      CMD="timeout $TIME $K -n $LOST_NS delete pvc $LOST_PVC --grace-period=0 --force=true"
+      if (( $DRYRUN )); then
+        pp dryrun
+        pp t3d "$CMD"
+      else
+        CLEAN=1
+        $CMD >& /dev/null; E=$?
+        if [ $E -gt 0 ]; then pp error; else pp del; fi
+      fi
+    else
+      pp skip
+    fi
+  done < <($K get pvc -A --no-headers 2>/dev/null | awk '$3 == "Lost" {print $1, $2}')
+  (( $PRINTED )) || pp nfound
+  IFS=$OLD_IFS
+  [ $CLEAN -gt 0 ] && timer $WAIT "Lost PVCs deleted, waiting to Kubernetes sync"
+
 # Search for resisted stuck namespaces and force deletion if --force is passed
   if (( $FORCE )); then
 
     pp t2 "Forcing deletion of stuck namespaces"
 
-    # Check if --force is used without --delete-resouce
+    # Check if --force is used without --delete-resource
     pp t3n "Checking compliance of --force option"
-    (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource options'"
+    (( $DELRES )) || pp fail "The '--force' option must be used with '--delete-all' or '--delete-resource' options"
     pp ok
 
-    # Try to get the access token
-    pp t3n "Getting the access token to force deletion"
-    TOKEN=$($K -n default describe secret \
-          $($K -n default get secrets | grep default | cut -f1 -d ' ') | \
-          grep -E '^token' | cut -f2 -d':' | tr -d '\t' | tr -d ' '); E=$?
-    [ $E -gt 0 ] && pp fail "Unable to get the token to force a deletion"
-    pp ok
-
-    # Try to up the kubectl proxy
-    pp t3n "Starting kubectl proxy"
-    $K proxy --accept-hosts='^localhost$,^127\.0\.0\.1$,^\[::1\]$' -p $KPORT  >> /tmp/proxy.out 2>&1 &
-    E=$?; KPID=$!
-    [ $E -gt 0 ] && pp fail "Unable start a proxy, check if the port '$KPORT' is free. Change it by passing '--port number' flag"
+    # Check for python3 (needed for JSON manipulation)
+    pp t3n "Checking for python3"
+    python3 --version >& /dev/null || pp fail "python3 is required for --force but was not found"
     pp ok
 
     # Force namespace deletion
@@ -354,35 +446,57 @@
     else
       pp found
       for NS in $NSS; do
-        pp t4n "Forcing deletion of $NS"
-        TMP=/tmp/$NS.json
-        $K get ns $NS -o json > $TMP 2>/dev/null
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-          sed -i '' "s/\"kubernetes\"//g" $TMP
-        else
-          sed -i s/\"kubernetes\"//g $TMP
-        fi
-        CMD="curl -s -o $TMP.log -X PUT --data-binary @$TMP http://localhost:$KPORT/api/v1/namespaces/$NS/finalize \
-                  -H \"Content-Type: application/json\" --header \"Authorization: Bearer $TOKEN\" --insecure"
+        pp t3n "Forcing deletion of $NS"
+        TMP=$(mktemp /tmp/knsk-XXXXXX.json)
+        CMD="$K replace --raw /api/v1/namespaces/$NS/finalize -f $TMP"
         if (( $DRYRUN )); then
           pp dryrun
-          pp t4d "$CMD"
+          pp t3d "# Get namespace JSON, clear spec.finalizers, then:"
+          pp t3d "$CMD"
         else
-          $CMD; sleep 5
-          pp ok
+          # Modern method: kubectl replace --raw (works on k8s 1.20+, no proxy or token needed)
+          $K get namespace "$NS" -o json 2>/dev/null | \
+            python3 -c "import sys,json; ns=json.load(sys.stdin); ns['spec']['finalizers']=[]; print(json.dumps(ns))" \
+            > "$TMP" 2>/dev/null
+          $CMD >& /dev/null; E=$?
+          if [ $E -gt 0 ]; then
+            # Fallback: kubectl proxy + curl (for clusters older than 1.20)
+            pp t3n "Modern method failed, trying legacy proxy method"
+            KPID=0
+            TOKEN=""
+            # Try modern token generation first (k8s 1.24+), then fall back to secret lookup
+            TOKEN=$($K create token default -n default 2>/dev/null) || \
+            TOKEN=$($K -n default get secrets -o jsonpath='{.items[?(@.type=="kubernetes.io/service-account-token")].data.token}' 2>/dev/null | \
+                    python3 -c "import sys,base64; d=sys.stdin.read().strip(); print(base64.b64decode(d).decode())" 2>/dev/null)
+            if [ -z "$TOKEN" ]; then
+              pp error
+              pp t4d "Could not obtain a token — namespace $NS may need manual cleanup"
+            else
+              $K proxy --accept-hosts='^localhost$,^127\.0\.0\.1$,^\[::1\]$' -p $KPORT >> /tmp/knsk-proxy.out 2>&1 &
+              KPID=$!; sleep 2
+              $K get ns "$NS" -o json 2>/dev/null | \
+                python3 -c "import sys,json; ns=json.load(sys.stdin); ns['spec']['finalizers']=[]; print(json.dumps(ns))" \
+                > "$TMP" 2>/dev/null
+              curl -s -X PUT --data-binary "@$TMP" \
+                "http://localhost:$KPORT/api/v1/namespaces/$NS/finalize" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $TOKEN" --insecure >& /dev/null; E=$?
+              kill $KPID 2>/dev/null; wait $KPID 2>/dev/null
+              if [ $E -gt 0 ]; then pp error; else pp ok; fi
+            fi
+          else
+            pp ok
+          fi
+          rm -f "$TMP"
         fi
       done
     fi
-
-    # Close the proxy
-    pp t3n "Stopping kubectl proxy"
-    kill $KPID; E=$?
-    wait $KPID 2>/dev/null
-    if [ $E -gt 0 ]; then pp error; else pp ok; fi
   fi
 
 # End of script
   (( 1-$FOUND )) || (( $DELBRK )) || (( $DELRES )) || (( $DELORP )) || \
-  pp t2 ":: Download and run '$G./knsk.sh --help$Y' if you want to delete resources by this script."
-  pp t2 ":: Done in $SECONDS seconds.$N"
+  pp t2 "Tip: run '$G./knsk.sh --help$Y' to see all options."
+  pp sep
+  pp t2 "Done in ${G}$SECONDS${Y} second(s)."
+  echo
   exit 0
