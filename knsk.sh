@@ -38,7 +38,7 @@
 
 # Function to show help
   show_help () {
-    echo -e "\n$G$(basename $0)$S $A[options]$S\n"
+    echo -e "\n$G$(basename $0)$S ${A}[options]$S\n"
     echo -e "  $Y--dry-run$S\t\tShow what will be executed instead of execute it $A(use with '--delete-*' options)$S"
     echo -e "  $Y--skip-tls$S\t\tSet --insecure-skip-tls-verify on kubectl calls"
     echo -e "  $Y--delete-api$S\t\tDelete broken API found in your Kubernetes cluster"
@@ -110,6 +110,8 @@ fi
         shift
       ;;
       --port)
+        # Ensure a value was actually supplied, or 'set -u' aborts on $1 below
+        [ $# -ge 2 ] || show_help
         shift
         # Check if the port is a number
         [ "$1" -eq "$1" ] 2>/dev/null || show_help
@@ -117,6 +119,8 @@ fi
         shift
       ;;
       --timeout)
+        # Ensure a value was actually supplied, or 'set -u' aborts on $1 below
+        [ $# -ge 2 ] || show_help
         shift
         # Check if the time is a number
         [ "$1" -eq "$1" ] 2>/dev/null || show_help
@@ -128,6 +132,8 @@ fi
         shift
       ;;
       --kubeconfig)
+        # Ensure a value was actually supplied, or 'set -u' aborts on $1 below
+        [ $# -ge 2 ] || show_help
         shift
         # Check if the kubeconfig exists
         [ ! -f "$1" ] && show_help
@@ -232,31 +238,32 @@ fi
 
 # Check for broken admission webhooks (a leading cause of stuck namespaces in k8s 1.20+)
   pp t2n "Checking for broken admission webhooks"
-  WHKS=$( { $K get validatingwebhookconfigurations -o custom-columns='NAME:.metadata.name,NS:.webhooks[*].clientConfig.service.namespace,SVC:.webhooks[*].clientConfig.service.name,FAIL:.webhooks[*].failurePolicy' --no-headers 2>/dev/null; \
-             $K get mutatingwebhookconfigurations   -o custom-columns='NAME:.metadata.name,NS:.webhooks[*].clientConfig.service.namespace,SVC:.webhooks[*].clientConfig.service.name,FAIL:.webhooks[*].failurePolicy' --no-headers 2>/dev/null; } )
-  OLD_IFS=$IFS; IFS=$'\n'; WHK_BROKEN=0
-  while IFS= read -r WHK_LINE; do
-    [ -z "$WHK_LINE" ] && continue
-    WHK_NAME=$(echo "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f1)
-    WHK_NS=$(echo   "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f2)
-    WHK_SVC=$(echo  "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f3)
-    WHK_FAIL=$(echo "$WHK_LINE" | tr -s ' ' | cut -d ' ' -f4)
-    # Skip webhooks that use a URL instead of a service reference
-    [ "$WHK_SVC" = "<none>" ] && continue
-    [ -z "$WHK_SVC" ] && continue
-    # Check if the backend service exists
-    $K get service "$WHK_SVC" -n "$WHK_NS" >& /dev/null; E=$?
-    if [ $E -gt 0 ]; then
+  WHK_BROKEN=0
+  for WHK_TYPE in validatingwebhookconfiguration mutatingwebhookconfiguration; do
+    WHK_NAMES=$($K get "${WHK_TYPE}s" -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null)
+    for WHK_NAME in $WHK_NAMES; do
+      [ -z "$WHK_NAME" ] && continue
+      # A configuration can hold many webhooks, each with its own backend service, so
+      # inspect them one per line instead of collapsing them into a comma-joined column
+      WHK_MISSING=''; WHK_FAILCLOSED=0
+      while IFS='|' read -r WHK_NS WHK_SVC WHK_FAIL; do
+        # Skip webhooks that use a URL instead of a service reference
+        [ -z "${WHK_SVC:-}" ] && continue
+        # Check if the backend service exists
+        $K get service "$WHK_SVC" -n "$WHK_NS" >& /dev/null && continue
+        WHK_MISSING="${WHK_MISSING:+$WHK_MISSING, }$WHK_NS/$WHK_SVC"
+        [ "${WHK_FAIL:-}" = "Fail" ] && WHK_FAILCLOSED=1
+      done < <($K get "$WHK_TYPE" "$WHK_NAME" -o jsonpath='{range .webhooks[*]}{.clientConfig.service.namespace}{"|"}{.clientConfig.service.name}{"|"}{.failurePolicy}{"\n"}{end}' 2>/dev/null)
+      # Only report a configuration when at least one of its services is really missing
+      [ -z "$WHK_MISSING" ] && continue
       WHK_BROKEN=1
       FOUND=1
-      if [ "$WHK_FAIL" = "Fail" ]; then
-        pp t3n "$R$WHK_NAME$S$Y (failurePolicy=Fail, svc: $R$WHK_NS/$WHK_SVC$S$Y — blocks deletions)"
+      if (( $WHK_FAILCLOSED )); then
+        pp t3n "$R$WHK_NAME$S$Y (failurePolicy=Fail, svc: $R$WHK_MISSING$S$Y — blocks deletions)"
       else
-        pp t3n "$R$WHK_NAME$S$Y (svc: $R$WHK_NS/$WHK_SVC$S$Y not found)"
+        pp t3n "$R$WHK_NAME$S$Y (svc: $R$WHK_MISSING$S$Y not found)"
       fi
       if (( $DELWHK )); then
-        # Detect whether it is validating or mutating
-        $K get validatingwebhookconfiguration "$WHK_NAME" >& /dev/null && WHK_TYPE="validatingwebhookconfiguration" || WHK_TYPE="mutatingwebhookconfiguration"
         CMD="timeout $TIME $K delete $WHK_TYPE $WHK_NAME"
         if (( $DRYRUN )); then
           pp dryrun
@@ -269,10 +276,9 @@ fi
       else
         pp skip
       fi
-    fi
-  done <<< "$WHKS"
+    done
+  done
   (( $WHK_BROKEN )) || pp nfound
-  IFS=$OLD_IFS
   [ $CLEAN -gt 0 ] && timer $WAIT "broken webhooks deleted, waiting to see if Kubernetes does a clean namespace deletion"
 
 # Search for resources in stuck namespaces
@@ -374,9 +380,13 @@ fi
     KND=$(echo $OR | tr -s ' ' | cut -d ' ' -f2)
     NRS=$(echo $OR | tr -s ' ' | cut -d ' ' -f3)
     # Check if the resource belongs an existent namespace
-    NOTOK=1; for NS in $NSS; do [[ $NS = *$NOS* ]] && NOTOK=0; done
+    # Skip rows without a namespace (cluster-scoped or unset)
+    [ "$NOS" = "<none>" ] && continue
+    [ -z "$NOS" ] && continue
+    # Exact match: a substring match let an existing 'dev-team' hide orphans of a deleted 'dev'
+    NOTOK=1; for NS in $NSS; do [ "$NS" = "$NOS" ] && { NOTOK=0; break; }; done
     if (( $NOTOK )); then
-      (( $PRINTED )) || pp found && PRINTED=1
+      if (( PRINTED == 0 )); then pp found; PRINTED=1; fi
       pp t3n "Found $R$KND/$NRS$S$Y on deleted namespace $R$NOS$S"
       if (( $DELORP )); then
         CMD1="timeout $TIME $K -n $NOS --grace-period=0 --force=true delete $KND/$NRS"
@@ -414,7 +424,7 @@ fi
     [ -z "$LINE" ] && continue
     LOST_NS=$(echo  "$LINE" | tr -s ' ' | cut -d ' ' -f1)
     LOST_PVC=$(echo "$LINE" | tr -s ' ' | cut -d ' ' -f2)
-    (( $PRINTED )) || pp found && PRINTED=1
+    if (( PRINTED == 0 )); then pp found; PRINTED=1; fi
     pp t3n "$R$LOST_NS$S$Y/pvc/$R$LOST_PVC$S"
     if (( $DELLOST )); then
       CMD="timeout $TIME $K -n $LOST_NS delete pvc $LOST_PVC"
@@ -424,7 +434,7 @@ fi
       else
         CLEAN=1
         bash -c "${CMD}" >& /dev/null; E=$?
-        if [ $? -gt 0 ]; then pp error; else pp del; fi
+        if [ $E -gt 0 ]; then pp error; else pp del; fi
       fi
     else
       pp skip

@@ -7,6 +7,9 @@ A battle-tested toolkit for dealing with **stuck namespaces** and backing up Kub
 
 > Requires `kubectl` ≥ 1.20 and `python3`. `backup.sh` additionally requires [`yq` v4](https://github.com/mikefarah/yq/releases).
 
+> [!WARNING]
+> **`knsk.sh` permanently deletes Kubernetes resources and removes finalizers.** Review the source before running it, run it without flags first (that is a read-only diagnosis), and preview with `--dry-run` before using any `--delete-*` or `--force` flag. See the [Disclaimer](#disclaimer).
+
 ---
 
 ## knsk.sh — Namespace Killer
@@ -184,6 +187,26 @@ Expected result: all namespaces, Deployments, ConfigMaps, Secrets, Services, Sta
 | `kubectl` | both scripts | https://kubernetes.io/docs/tasks/tools/ |
 | `python3` | `knsk.sh --force` | pre-installed on most systems |
 | `yq` v4 | `backup.sh` | `brew install yq` · [GitHub releases](https://github.com/mikefarah/yq/releases) |
+
+---
+
+## Disclaimer
+
+**This software is provided "as is", without warranty of any kind, express or implied**, including but not limited to the warranties of merchantability, fitness for a particular purpose and noninfringement. See [LICENSE](LICENSE) for the full text.
+
+**Read the source before you run it.** `knsk.sh` and `backup.sh` are deliberately plain, readable shell scripts. You are expected to review them yourself and satisfy yourself that they do what you intend before running them against any cluster you care about. Never pipe them from a URL into a shell without reading them first.
+
+**Use at your own risk.** These scripts force-delete Kubernetes resources, strip finalizers, and deliberately bypass safeguards the API server would normally enforce. Used incorrectly — or used correctly against the wrong cluster — they can cause **irreversible data loss**, orphan resources, and permanently break running workloads. The `--force` option in particular removes namespace finalizers, which tells Kubernetes to forget cleanup work it had not finished.
+
+**The author and contributors accept no responsibility or liability** for any damage, downtime, data loss, or malfunction arising from the use or misuse of this software, whether or not that behaviour results from a defect in the software. You are solely responsible for verifying the code, for testing it, and for the consequences of running it.
+
+Recommended before any destructive run:
+
+1. **Confirm the target cluster** — `kubectl config current-context`
+2. **Take a backup** — `./backup.sh` (or your own tooling)
+3. **Preview the commands** — `./knsk.sh --dry-run --delete-all --force`
+4. **Test on a non-production cluster** before trusting it on a production one
+5. Only then run it for real
 
 ---
 
